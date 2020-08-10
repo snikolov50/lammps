@@ -12,8 +12,7 @@
 ------------------------------------------------------------------------- */
 
 /* ----------------------------------------------------------------------
-   Contributing authors: Paul Crozier (SNL)
-                         Carolyn Phillips (University of Michigan)
+   Contributing authors: Svetoslav Nikolov (SNL)
 ------------------------------------------------------------------------- */
 
 #include "fix_langevin_ttm.h"
