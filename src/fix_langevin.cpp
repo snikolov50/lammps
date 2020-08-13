@@ -39,6 +39,10 @@
 #include "error.h"
 #include "group.h"
 #include "utils.h"
+#include "pointers.h"
+#include "domain.h"
+#include "fix_ttm.h"
+#include "fix_ttm.cpp"
 
 using namespace LAMMPS_NS;
 using namespace FixConst;
@@ -56,35 +60,76 @@ FixLangevin::FixLangevin(LAMMPS *lmp, int narg, char **arg) :
   gjfflag(0), gfactor1(NULL), gfactor2(NULL), ratio(NULL), tstr(NULL),
   flangevin(NULL), tforce(NULL), franprev(NULL), lv(NULL), id_temp(NULL), random(NULL)
 {
-  if (narg < 7) error->all(FLERR,"Illegal fix langevin command");
 
-  dynamic_group_allow = 1;
-  scalar_flag = 1;
-  global_freq = 1;
-  extscalar = 1;
-  nevery = 1;
+  if (strcmp(arg[3], "ttm")==0) {
 
-  if (strstr(arg[3],"v_") == arg[3]) {
-    int n = strlen(&arg[3][2]) + 1;
-    tstr = new char[n];
-    strcpy(tstr,&arg[3][2]);
-  } else {
-    t_start = force->numeric(FLERR,arg[3]);
-    t_target = t_start;
-    tstyle = CONSTANT;
+     ttmflag = 1;
+     ttmfix = arg[4];
+     int tmp;
+
+     for (int whichfix = 0; whichfix < modify->nfix; whichfix++) {
+
+       if (strcmp(ttmfix,modify->fix[whichfix]->id) == 0){
+            ttm_id = whichfix;
+            int *dummy = (int *) modify->fix[whichfix]->extract("seed",tmp);
+            seed = dummy[0];
+            break;
+       }
+       
+
+       if (whichfix == (modify->nfix-1)){
+
+            error->universe_all(FLERR,"ttm fix ID is not defined");
+
+       }
+
+     }
+
   }
 
-  t_stop = force->numeric(FLERR,arg[4]);
-  t_period = force->numeric(FLERR,arg[5]);
-  seed = force->inumeric(FLERR,arg[6]);
+  else {
 
-  if (t_period <= 0.0) error->all(FLERR,"Fix langevin period must be > 0.0");
-  if (seed <= 0) error->all(FLERR,"Illegal fix langevin command");
+      if (narg < 7) {
 
+         error->all(FLERR,"Illegal fix langevin command");
+
+      }
+
+//  if (narg < 7) error->all(FLERR,"Illegal fix langevin command");
+
+      dynamic_group_allow = 1;
+      scalar_flag = 1;
+      global_freq = 1;
+      extscalar = 1;
+      nevery = 1;
+
+      if (strstr(arg[3],"v_") == arg[3]) {
+         int n = strlen(&arg[3][2]) + 1;
+         tstr = new char[n];
+         strcpy(tstr,&arg[3][2]);
+      } else {
+         t_start = force->numeric(FLERR,arg[3]);
+         t_target = t_start;
+         tstyle = CONSTANT;
+      }   
+
+         t_stop = force->numeric(FLERR,arg[4]);
+         t_period = force->numeric(FLERR,arg[5]);
+         seed = force->inumeric(FLERR,arg[6]);
+
+//  if (strcmp(arg[3], "ttm")==0) {
+//     ttmflag = 1;
+//     ttmfix = arg[4];
+//  }
+
+       if (t_period <= 0.0) error->all(FLERR,"Fix langevin period must be > 0.0");
+       if (seed <= 0) error->all(FLERR,"Illegal fix langevin command");
+ 
   // initialize Marsaglia RNG with processor-unique seed
 
   random = new RanMars(lmp,seed + comm->me);
 
+  }
   // allocate per-type arrays for force prefactors
 
   gfactor1 = new double[atom->ntypes+1];
@@ -101,9 +146,16 @@ FixLangevin::FixLangevin(LAMMPS *lmp, int narg, char **arg) :
   tallyflag = 0;
   zeroflag = 0;
   osflag = 0;
+//  ttmflag = 0;
+//  ttmfix = NULL;
 
   int iarg = 7;
   while (iarg < narg) {
+//    if (strcmp(arg[iarg], "ttm")==0) {
+//       ttmflag = 1;
+//       ttmfix = arg[iarg+1];
+//       iarg += 2;
+//    }
     if (strcmp(arg[iarg],"angmom") == 0) {
       if (iarg+2 > narg) error->all(FLERR,"Illegal fix langevin command");
       if (strcmp(arg[iarg+1],"no") == 0) ascale = 0.0;
@@ -275,7 +327,13 @@ void FixLangevin::init()
         if (radius[i] == 0.0)
           error->one(FLERR,"Fix langevin omega requires extended particles");
   }
+  
+  if (ttmflag==1){
 
+     tstyle = ATOM;
+
+  }
+  
   if (ascale) {
     avec = (AtomVecEllipsoid *) atom->style_match("ellipsoid");
     if (!avec)
@@ -646,7 +704,7 @@ void FixLangevin::post_force_templated()
   }
 
   if (Tp_BIAS) temperature->compute_scalar();
-
+//  temperature->compute_scalar();
   for (int i = 0; i < nlocal; i++) {
     if (mask[i] & groupbit) {
       if (Tp_TSTYLEATOM) tsqrt = sqrt(tforce[i]);
@@ -785,8 +843,11 @@ void FixLangevin::compute_target()
 {
   int *mask = atom->mask;
   int nlocal = atom->nlocal;
-
+  double **x = atom->x;
+//  double **v = atom->v;
+//  double **f = atom->f;
   double delta = update->ntimestep - update->beginstep;
+
   if (delta != 0.0) delta /= update->endstep - update->beginstep;
 
   // if variable temp, evaluate variable, wrap with clear/add
@@ -802,7 +863,10 @@ void FixLangevin::compute_target()
       if (t_target < 0.0)
         error->one(FLERR,"Fix langevin variable returned negative temperature");
       tsqrt = sqrt(t_target);
-    } else {
+    } 
+
+    else if (tstyle==ATOM && ttmflag==0) {
+
       if (atom->nmax > maxatom2) {
         maxatom2 = atom->nmax;
         memory->destroy(tforce);
@@ -812,11 +876,51 @@ void FixLangevin::compute_target()
       for (int i = 0; i < nlocal; i++)
         if (mask[i] & groupbit)
             if (tforce[i] < 0.0)
-              error->one(FLERR,
-                         "Fix langevin variable returned negative temperature");
+              error->one(FLERR, "Fix langevin variable returned negative temperature");
+
     }
+
+    else {
+
+      int tmp;
+      double ***T_electron = (double ***) modify->fix[ttm_id]->extract("electron_temperature",tmp); 
+      int *nodes_xyz = (int *) modify->fix[ttm_id]->extract("nodes",tmp);
+      int nxnodes = nodes_xyz[0];
+      int nynodes = nodes_xyz[1];
+      int nznodes = nodes_xyz[2];
+
+      if (atom->nmax > maxatom2) {
+        maxatom2 = atom->nmax;
+        memory->destroy(tforce);
+        memory->create(tforce,maxatom2,"langevin:tforce");
+      }
+
+      for (int i = 0; i < nlocal; i++)
+        if (mask[i] & groupbit){
+
+            double xscale = (x[i][0] - domain->boxlo[0])/domain->xprd;
+            double yscale = (x[i][1] - domain->boxlo[1])/domain->yprd;
+            double zscale = (x[i][2] - domain->boxlo[2])/domain->zprd;
+            int ixnode = static_cast<int>(xscale*nxnodes);
+            int iynode = static_cast<int>(yscale*nynodes);
+            int iznode = static_cast<int>(zscale*nznodes);
+            while (ixnode > nxnodes-1) ixnode -= nxnodes;
+            while (iynode > nynodes-1) iynode -= nynodes;
+            while (iznode > nznodes-1) iznode -= nznodes;
+            while (ixnode < 0) ixnode += nxnodes;
+            while (iynode < 0) iynode += nynodes;
+            while (iznode < 0) iznode += nznodes;
+
+            tforce[i] = T_electron[ixnode][iynode][iznode];
+            if (tforce[i] < 0.0)
+              error->one(FLERR, "Fix ttm returned negative electron temperature");
+        }
+    }
+
     modify->addstep_compute(update->ntimestep + 1);
+
   }
+
 }
 
 /* ----------------------------------------------------------------------

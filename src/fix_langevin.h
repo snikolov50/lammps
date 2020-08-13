@@ -47,8 +47,10 @@ class FixLangevin : public Fix {
   int unpack_exchange(int, double *);
 
  protected:
-  int gjfflag,nvalues,osflag,oflag,tallyflag,zeroflag,tbiasflag;
+  int gjfflag,nvalues,osflag,oflag,tallyflag,zeroflag,tbiasflag,ttmflag;
+  int ttm_id;
   int flangevin_allocated;
+  int whichfix;
   double ascale;
   double t_start,t_stop,t_period,t_target;
   double *gfactor1,*gfactor2,*ratio;
@@ -56,7 +58,7 @@ class FixLangevin : public Fix {
   double tsqrt;
   int tstyle,tvar;
   double gjfa, gjfsib; //gjf a and gjf sqrt inverse b
-  char *tstr;
+  char *tstr, *ttmfix;
 
   class AtomVecEllipsoid *avec;
 
