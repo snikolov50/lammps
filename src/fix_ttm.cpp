@@ -61,7 +61,26 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
 
   id_temp = NULL;
   temperature = NULL;
-  seed = force->inumeric(FLERR,arg[3]);
+//  seed = force->inumeric(FLERR,arg[3]);
+
+  for (whichfix = 0; whichfix < modify->nfix; whichfix++) {
+
+     if (strcmp(arg[3],modify->fix[whichfix]->id) == 0){
+         lang_fix_name = arg[3];
+         int tmp;
+         int *dummy = (int *) modify->fix[whichfix]->extract("seed",tmp);
+         seed = dummy[0];
+         break;
+
+     }
+
+     if (whichfix == modify->nfix){
+
+         error->universe_all(FLERR,"langevin fix ID is not defined");
+
+     }
+  }
+
   electronic_specific_heat = force->numeric(FLERR,arg[4]);
   electronic_density = force->numeric(FLERR,arg[5]);
   electronic_thermal_conductivity = force->numeric(FLERR,arg[6]);
@@ -85,7 +104,7 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
   nfileevery = force->inumeric(FLERR,arg[14]);
 
   if (nfileevery) {
-    if (narg != 17) error->all(FLERR,"Illegal fix ttm command");
+    if (narg != 16) error->all(FLERR,"Illegal fix ttm command");
     MPI_Comm_rank(world,&me);
     if (me == 0) {
       fp = fopen(arg[15],"w");
@@ -112,21 +131,6 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
   if (v_0 < 0.0) error->all(FLERR,"Fix ttm v_0 must be >= 0.0");
   if (nxnodes <= 0 || nynodes <= 0 || nznodes <= 0)
     error->all(FLERR,"Fix ttm number of nodes must be > 0");
-
-  for (whichfix = 0; whichfix < modify->nfix; whichfix++) {
-
-     if (strcmp(arg[narg-1],modify->fix[whichfix]->id) == 0){
-
-         break;
-
-     }  
-
-     if (whichfix == modify->nfix){
-
-         error->universe_all(FLERR,"ttm fix ID is not defined");
-
-     }
-  } 
 
   v_0_sq = v_0*v_0;
 
@@ -241,6 +245,10 @@ void FixTTM::init()
   if (domain->triclinic)
     error->all(FLERR,"Cannot use fix ttm with triclinic box");
 
+//  int tmp;
+//  int *dummy = (int *) modify->fix[whichfix]->extract("seed",tmp);
+//  seed = dummy[0];
+
   // set force prefactors
 
   for (int i = 1; i <= atom->ntypes; i++) {
@@ -261,14 +269,14 @@ void FixTTM::init()
     }
   }
 
-  if (strstr(update->integrate_style,"respa"))
+  if (strstr(update->integrate_style,"respa"))                // same as in fix_langevin init (probably delete after everything is moved)
     nlevels_respa = ((Respa *) update->integrate)->nlevels;
 
 }
 
 /* ---------------------------------------------------------------------- */
 
-void FixTTM::setup(int vflag)
+void FixTTM::setup(int vflag)                   // same as in fix_langevin (probably delete after everthing is moved)
 {
   if (strstr(update->integrate_style,"verlet"))
     post_force_setup(vflag);
@@ -834,7 +842,7 @@ int FixTTM::modify_param(int narg, char **arg)
 }
 
 /* ----------------------------------------------------------------------
- *    extract thermostat properties
+ *    sending properties to fix langevin properties
  *    ------------------------------------------------------------------------- */
 
 void *FixTTM::extract(const char *str, int &dim)
@@ -851,6 +859,18 @@ void *FixTTM::extract(const char *str, int &dim)
   if (strcmp(str,"seed") == 0) {
     dim = 1;
     return &seed;
+  }
+  if (strcmp(str,"gamma_p") == 0) {
+    dim = 1;
+    return &gamma_p;
+  }
+  if (strcmp(str,"gamma_s") == 0) {
+    dim = 1;
+    return &gamma_s;
+  }
+  if (strcmp(str,"v_0") == 0) {
+    dim = 1;
+    return &v_0;
   }
   return NULL;
 }

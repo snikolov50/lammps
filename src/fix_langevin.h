@@ -45,14 +45,15 @@ class FixLangevin : public Fix {
   void copy_arrays(int, int, int);
   int pack_exchange(int, double *);
   int unpack_exchange(int, double *);
+//  virtual void *extract(const char *, int&);
 
  protected:
   int gjfflag,nvalues,osflag,oflag,tallyflag,zeroflag,tbiasflag,ttmflag;
   int ttm_id;
   int flangevin_allocated;
   int whichfix;
-  double ascale;
-  double t_start,t_stop,t_period,t_target;
+  double ascale,v_0,v_0_sq;
+  double t_start,t_stop,t_period,t_target,gamma_p,gamma_s;
   double *gfactor1,*gfactor2,*ratio;
   double energy,energy_onestep;
   double tsqrt;

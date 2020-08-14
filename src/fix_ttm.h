@@ -53,6 +53,7 @@ class FixTTM : public Fix {
 
  protected:
   char *id_temp;
+  char *lang_fix_name;
   class Compute *temperature;
 
  private:

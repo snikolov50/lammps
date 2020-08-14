@@ -61,18 +61,25 @@ FixLangevin::FixLangevin(LAMMPS *lmp, int narg, char **arg) :
   flangevin(NULL), tforce(NULL), franprev(NULL), lv(NULL), id_temp(NULL), random(NULL)
 {
 
-  if (strcmp(arg[3], "ttm")==0) {
+//  if (strcmp(arg[3], "ttm")==0) {
 
+  for (int index = 0; index < (narg-2); index++){
+
+     if (arg[index]=="ttm"){
      ttmflag = 1;
-     ttmfix = arg[4];
+     ttmfix = arg[index+1];
+     seed = force->inumeric(FLERR,arg[index+2]);
+     int ttm_arg_index = index;
      int tmp;
+     }
+  }
+
+  if (ttmflag==1) {
 
      for (int whichfix = 0; whichfix < modify->nfix; whichfix++) {
 
        if (strcmp(ttmfix,modify->fix[whichfix]->id) == 0){
             ttm_id = whichfix;
-            int *dummy = (int *) modify->fix[whichfix]->extract("seed",tmp);
-            seed = dummy[0];
             break;
        }
        
@@ -124,12 +131,13 @@ FixLangevin::FixLangevin(LAMMPS *lmp, int narg, char **arg) :
 
        if (t_period <= 0.0) error->all(FLERR,"Fix langevin period must be > 0.0");
        if (seed <= 0) error->all(FLERR,"Illegal fix langevin command");
+
+  }
  
   // initialize Marsaglia RNG with processor-unique seed
 
   random = new RanMars(lmp,seed + comm->me);
 
-  }
   // allocate per-type arrays for force prefactors
 
   gfactor1 = new double[atom->ntypes+1];
@@ -331,6 +339,16 @@ void FixLangevin::init()
   if (ttmflag==1){
 
      tstyle = ATOM;
+//     int *dummy0 = (int *) modify->fix[whichfix]->extract("seed",tmp);
+//     seed = dummy0[0];
+     int tmp;
+     double *dummy1 = (double *) modify->fix[whichfix]->extract("gamma_p",tmp);
+     gamma_p = dummy1[0];
+     double *dummy2 = (double *) modify->fix[whichfix]->extract("gamma_s",tmp);
+     gamma_s = dummy2[0];
+     double *dummy3 = (double *) modify->fix[whichfix]->extract("v_0",tmp);
+     v_0 = dummy3[0];
+     v_0_sq = v_0*v_0;
 
   }
   
@@ -352,18 +370,35 @@ void FixLangevin::init()
   // set force prefactors
 
   if (!atom->rmass) {
+
     for (int i = 1; i <= atom->ntypes; i++) {
-      gfactor1[i] = -atom->mass[i] / t_period / force->ftm2v;
-      if (gjfflag)
-        gfactor2[i] = sqrt(atom->mass[i]) *
-          sqrt(2.0*force->boltz/t_period/update->dt/force->mvv2e) /
-          force->ftm2v;
-      else
-        gfactor2[i] = sqrt(atom->mass[i]) *
-          sqrt(24.0*force->boltz/t_period/update->dt/force->mvv2e) /
-          force->ftm2v;
+
+      if (ttmflag==0){
+         gfactor1[i] = -atom->mass[i] / t_period / force->ftm2v;
+      }
+
+      else{
+         gfactor1[i] = - gamma_p / force->ftm2v;
+      }
+
+      if (gjfflag){
+          gfactor2[i] = sqrt(atom->mass[i]) * sqrt(2.0*force->boltz/t_period/update->dt/force->mvv2e) / force->ftm2v;
+      }
+
+      else{
+
+	  if (ttmflag==0){
+             gfactor2[i] = sqrt(atom->mass[i]) * sqrt(24.0*force->boltz/t_period/update->dt/force->mvv2e) / force->ftm2v;
+          }
+          else{
+             gfactor2[i] = sqrt(24.0*force->boltz*gamma_p/update->dt/force->mvv2e) / force->ftm2v;
+          }
+
+      }
+
       gfactor1[i] *= 1.0/ratio[i];
       gfactor2[i] *= 1.0/sqrt(ratio[i]);
+
     }
   }
 
@@ -707,28 +742,35 @@ void FixLangevin::post_force_templated()
 //  temperature->compute_scalar();
   for (int i = 0; i < nlocal; i++) {
     if (mask[i] & groupbit) {
-      if (Tp_TSTYLEATOM) tsqrt = sqrt(tforce[i]);
+      if (Tp_TSTYLEATOM && ttmflag==0){
+         tsqrt = sqrt(tforce[i]);
+      }
+      else{
+         tsqrt = sqrt(tforce[i]);
+         double vsq = v[i][0]*v[i][0] + v[i][1]*v[i][1] + v[i][2]*v[i][2];      // this line and the one below it are for electron stopping
+         if (vsq > v_0_sq) gamma1 *= (gamma_p + gamma_s)/gamma_p;  
+      }
       if (Tp_RMASS) {
-        gamma1 = -rmass[i] / t_period / ftm2v;
+          gamma1 = -rmass[i] / t_period / ftm2v;
         if (Tp_GJF)
           gamma2 = sqrt(rmass[i]) * sqrt(2.0*boltz/t_period/dt/mvv2e) / ftm2v;
         else
           gamma2 = sqrt(rmass[i]) * sqrt(24.0*boltz/t_period/dt/mvv2e) / ftm2v;
-        gamma1 *= 1.0/ratio[type[i]];
-        gamma2 *= 1.0/sqrt(ratio[type[i]]) * tsqrt;
+          gamma1 *= 1.0/ratio[type[i]];
+          gamma2 *= 1.0/sqrt(ratio[type[i]]) * tsqrt;
       } else {
-        gamma1 = gfactor1[type[i]];
-        gamma2 = gfactor2[type[i]] * tsqrt;
+          gamma1 = gfactor1[type[i]];
+          gamma2 = gfactor2[type[i]] * tsqrt;
       }
 
       if (Tp_GJF) {
-        fran[0] = gamma2*random->gaussian();
-        fran[1] = gamma2*random->gaussian();
-        fran[2] = gamma2*random->gaussian();
+          fran[0] = gamma2*random->gaussian();
+          fran[1] = gamma2*random->gaussian();
+          fran[2] = gamma2*random->gaussian();
       } else {
-        fran[0] = gamma2*(random->uniform()-0.5);
-        fran[1] = gamma2*(random->uniform()-0.5);
-        fran[2] = gamma2*(random->uniform()-0.5);
+          fran[0] = gamma2*(random->uniform()-0.5);
+          fran[1] = gamma2*(random->uniform()-0.5);
+          fran[2] = gamma2*(random->uniform()-0.5);
       }
 
       if (Tp_BIAS) {
@@ -1207,6 +1249,10 @@ void *FixLangevin::extract(const char *str, int &dim)
   dim = 0;
   if (strcmp(str,"t_target") == 0) {
     return &t_target;
+  }
+  if (strcmp(str,"seed") == 0) {
+    dim = 1;
+    return &seed;
   }
   return NULL;
 }
