@@ -61,16 +61,16 @@ FixLangevin::FixLangevin(LAMMPS *lmp, int narg, char **arg) :
   flangevin(NULL), tforce(NULL), franprev(NULL), lv(NULL), id_temp(NULL), random(NULL)
 {
 
-//  if (strcmp(arg[3], "ttm")==0) {
+  id_temp = NULL;
+  temperature = NULL;
 
   for (int index = 0; index < (narg-2); index++){
 
-     if (arg[index]=="ttm"){
-     ttmflag = 1;
-     ttmfix = arg[index+1];
-     seed = force->inumeric(FLERR,arg[index+2]);
-     int ttm_arg_index = index;
-     int tmp;
+     if (strcmp(arg[index],"ttm")==0){
+        ttmflag = 1;
+        tallyflag = 1;
+        ttmfix = arg[index+1];
+        int ttm_arg_index = index;
      }
   }
 
@@ -79,8 +79,11 @@ FixLangevin::FixLangevin(LAMMPS *lmp, int narg, char **arg) :
      for (int whichfix = 0; whichfix < modify->nfix; whichfix++) {
 
        if (strcmp(ttmfix,modify->fix[whichfix]->id) == 0){
-            ttm_id = whichfix;
-            break;
+             ttm_id = whichfix;
+             int tmp;
+             LAMMPS_NS::Compute *dummy5 = (LAMMPS_NS::Compute *) modify->fix[ttm_id]->extract("temperature",tmp);
+             temperature = dummy5;
+             break;
        }
        
 
@@ -91,6 +94,9 @@ FixLangevin::FixLangevin(LAMMPS *lmp, int narg, char **arg) :
        }
 
      }
+
+     seed = force->inumeric(FLERR,arg[5]);
+     if (seed <= 0) error->all(FLERR,"Illegal fix langevin command");
 
   }
 
@@ -154,16 +160,9 @@ FixLangevin::FixLangevin(LAMMPS *lmp, int narg, char **arg) :
   tallyflag = 0;
   zeroflag = 0;
   osflag = 0;
-//  ttmflag = 0;
-//  ttmfix = NULL;
 
   int iarg = 7;
   while (iarg < narg) {
-//    if (strcmp(arg[iarg], "ttm")==0) {
-//       ttmflag = 1;
-//       ttmfix = arg[iarg+1];
-//       iarg += 2;
-//    }
     if (strcmp(arg[iarg],"angmom") == 0) {
       if (iarg+2 > narg) error->all(FLERR,"Illegal fix langevin command");
       if (strcmp(arg[iarg+1],"no") == 0) ascale = 0.0;
@@ -216,8 +215,8 @@ FixLangevin::FixLangevin(LAMMPS *lmp, int narg, char **arg) :
 
   // set temperature = NULL, user can override via fix_modify if wants bias
 
-  id_temp = NULL;
-  temperature = NULL;
+//  id_temp = NULL;
+//  temperature = NULL;
 
   energy = 0.0;
 
@@ -250,6 +249,7 @@ FixLangevin::FixLangevin(LAMMPS *lmp, int narg, char **arg) :
       lv[i][0] = 0.0;
       lv[i][1] = 0.0;
       lv[i][2] = 0.0;
+
     }
   }
 
@@ -338,17 +338,33 @@ void FixLangevin::init()
   
   if (ttmflag==1){
 
+     tallyflag = 1;
      tstyle = ATOM;
 //     int *dummy0 = (int *) modify->fix[whichfix]->extract("seed",tmp);
 //     seed = dummy0[0];
      int tmp;
-     double *dummy1 = (double *) modify->fix[whichfix]->extract("gamma_p",tmp);
+     double *dummy1 = (double *) modify->fix[ttm_id]->extract("gamma_p",tmp);
      gamma_p = dummy1[0];
-     double *dummy2 = (double *) modify->fix[whichfix]->extract("gamma_s",tmp);
+     double *dummy2 = (double *) modify->fix[ttm_id]->extract("gamma_s",tmp);
      gamma_s = dummy2[0];
-     double *dummy3 = (double *) modify->fix[whichfix]->extract("v_0",tmp);
+     double *dummy3 = (double *) modify->fix[ttm_id]->extract("v_0",tmp);
      v_0 = dummy3[0];
      v_0_sq = v_0*v_0;
+
+    if (atom->nmax > maxatom1) {
+      memory->destroy(flangevin);
+      maxatom1 = atom->nmax;
+      memory->create(flangevin,maxatom1,3,"langevin:flangevin");
+    }
+
+    flangevin_allocated = 1;
+
+     for (int i = 0; i < atom->nmax; i++) {
+         flangevin[i][0] = 0;
+         flangevin[i][1] = 0;
+         flangevin[i][2] = 0;
+     }
+
 
   }
   
@@ -730,12 +746,25 @@ void FixLangevin::post_force_templated()
   // reallocate flangevin if necessary
 
   if (Tp_TALLY) {
-    if (atom->nmax > maxatom1) {
-      memory->destroy(flangevin);
-      maxatom1 = atom->nmax;
-      memory->create(flangevin,maxatom1,3,"langevin:flangevin");
-    }
-    flangevin_allocated = 1;
+
+       if (ttmflag==0){ 
+
+	    if (atom->nmax > maxatom1) {
+	      memory->destroy(flangevin);
+	      maxatom1 = atom->nmax;
+	      memory->create(flangevin,maxatom1,3,"langevin:flangevin");
+	    }
+	    flangevin_allocated = 1;
+
+       }
+
+       else{
+
+              int tmp;
+              double **flangevin = (double **) modify->fix[ttm_id]->extract("flangevin",tmp);
+
+       }
+
   }
 
   if (Tp_BIAS) temperature->compute_scalar();
@@ -747,8 +776,20 @@ void FixLangevin::post_force_templated()
       }
       else{
          tsqrt = sqrt(tforce[i]);
-         double vsq = v[i][0]*v[i][0] + v[i][1]*v[i][1] + v[i][2]*v[i][2];      // this line and the one below it are for electron stopping
-         if (vsq > v_0_sq) gamma1 *= (gamma_p + gamma_s)/gamma_p;  
+         if (Tp_BIAS) {
+            temperature->remove_bias(i,v[i]);
+            double vsq = v[i][0]*v[i][0] + v[i][1]*v[i][1] + v[i][2]*v[i][2];
+            temperature->restore_bias(i,v[i]);
+            if (vsq > v_0_sq){
+               gamma1 *= (gamma_p + gamma_s)/gamma_p;
+            }
+         }
+         else {
+            double vsq = v[i][0]*v[i][0] + v[i][1]*v[i][1] + v[i][2]*v[i][2];
+            if (vsq > v_0_sq){
+               gamma1 *= (gamma_p + gamma_s)/gamma_p;
+            }
+         }
       }
       if (Tp_RMASS) {
           gamma1 = -rmass[i] / t_period / ftm2v;
@@ -1253,6 +1294,10 @@ void *FixLangevin::extract(const char *str, int &dim)
   if (strcmp(str,"seed") == 0) {
     dim = 1;
     return &seed;
+  }
+  if (strcmp(str,"flangevin") == 0) {
+    dim = 2;
+    return flangevin;
   }
   return NULL;
 }

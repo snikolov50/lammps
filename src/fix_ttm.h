@@ -30,41 +30,27 @@ class FixTTM : public Fix {
   ~FixTTM();
   int setmask();
   void init();
-  void setup(int);
-  void post_force(int);
-  void post_force_respa(int, int, int);
-  void post_force_setup(int);
-  void post_force_respa_setup(int, int, int);
   void end_of_step();
-  void reset_dt();
   void write_restart(FILE *);
   void restart(char *);
-  int pack_restart(int, double *);
-  void unpack_restart(int, int);
-  int size_restart(int);
-  int maxsize_restart();
   double memory_usage();
-  void grow_arrays(int);
   double compute_vector(int);
   int modify_param(int, char **);
   virtual void *extract(const char *, int&);
-//  double ***T_electron;
-//  int nxnodes,nynodes,nznodes,total_nnodes
+  char lang_fix_name[100];
 
  protected:
   char *id_temp;
-  char *lang_fix_name;
   class Compute *temperature;
 
  private:
+//  char langName[100] = NULL;
+  int lang_arg_index;
   int me;
-  int whichfix;
+  int id_lang;
   int nfileevery;
   int nlevels_respa;
-  int seed;
-  class RanMars *random;
   FILE *fp,*fpr;
-//  int nxnodes,nynodes,nznodes,total_nnodes;
   int ***nsum;
   int ***nsum_all,***T_initial_set;
   double *gfactor1,*gfactor2,*ratio;

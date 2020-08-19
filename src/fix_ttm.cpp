@@ -42,12 +42,12 @@ using namespace FixConst;
 
 FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
   Fix(lmp, narg, arg),
-  random(NULL), fp(NULL), fpr(NULL), nsum(NULL), nsum_all(NULL),
+  fp(NULL), fpr(NULL), nsum(NULL), nsum_all(NULL),
   T_initial_set(NULL), gfactor1(NULL), gfactor2(NULL), ratio(NULL),
   flangevin(NULL), T_electron(NULL), T_electron_old(NULL), sum_vsq(NULL),
   sum_mass_vsq(NULL), sum_vsq_all(NULL), sum_mass_vsq_all(NULL),
   net_energy_transfer(NULL), net_energy_transfer_all(NULL), u_node(NULL), v_node(NULL), w_node(NULL), nvel(NULL),
-  u_node_all(NULL), v_node_all(NULL), w_node_all(NULL), nvel_all(NULL)
+  u_node_all(NULL), v_node_all(NULL), w_node_all(NULL), nvel_all(NULL), id_lang(NULL)
 {
   if (narg < 15) error->all(FLERR,"Illegal fix ttm command");
 
@@ -61,56 +61,50 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
 
   id_temp = NULL;
   temperature = NULL;
-//  seed = force->inumeric(FLERR,arg[3]);
 
-  for (whichfix = 0; whichfix < modify->nfix; whichfix++) {
+  for (int index = 0; index < (narg-1); index++){
 
-     if (strcmp(arg[3],modify->fix[whichfix]->id) == 0){
-         lang_fix_name = arg[3];
-         int tmp;
-         int *dummy = (int *) modify->fix[whichfix]->extract("seed",tmp);
-         seed = dummy[0];
-         break;
-
+     if (strcmp(arg[index],"lang")==0){
+        if (strlen(arg[index+1])>100){
+           error->all(FLERR,"Illegal fix langevin name: uses less than 100 characters");
+        } //       strncpy(lang_fix_name,arg[index+1],100); 
+        strncpy(lang_fix_name,arg[index+1],100); 
+//        lang_fix_name = arg[index+1];
+        lang_arg_index = index;        // getting langevin fix location in argument list
      }
 
-     if (whichfix == modify->nfix){
-
-         error->universe_all(FLERR,"langevin fix ID is not defined");
-
-     }
   }
 
-  electronic_specific_heat = force->numeric(FLERR,arg[4]);
-  electronic_density = force->numeric(FLERR,arg[5]);
-  electronic_thermal_conductivity = force->numeric(FLERR,arg[6]);
-  gamma_p = force->numeric(FLERR,arg[7]);
-  gamma_s = force->numeric(FLERR,arg[8]);
-  v_0 = force->numeric(FLERR,arg[9]);
-  nxnodes = force->inumeric(FLERR,arg[10]);
-  nynodes = force->inumeric(FLERR,arg[11]);
-  nznodes = force->inumeric(FLERR,arg[12]);
+  electronic_specific_heat = force->numeric(FLERR,arg[3]);
+  electronic_density = force->numeric(FLERR,arg[4]);
+  electronic_thermal_conductivity = force->numeric(FLERR,arg[5]);
+  gamma_p = force->numeric(FLERR,arg[6]);
+  gamma_s = force->numeric(FLERR,arg[7]);
+  v_0 = force->numeric(FLERR,arg[8]);
+  nxnodes = force->inumeric(FLERR,arg[9]);
+  nynodes = force->inumeric(FLERR,arg[10]);
+  nznodes = force->inumeric(FLERR,arg[11]);
   nodes_xyz[0] = nxnodes;
   nodes_xyz[1] = nynodes;
   nodes_xyz[2] = nznodes;
 
-  fpr = fopen(arg[13],"r");
+  fpr = fopen(arg[12],"r");
   if (fpr == NULL) {
     char str[128];
-    snprintf(str,128,"Cannot open file %s",arg[13]);
+    snprintf(str,128,"Cannot open file %s",arg[12]);
     error->one(FLERR,str);
   }
 
-  nfileevery = force->inumeric(FLERR,arg[14]);
+  nfileevery = force->inumeric(FLERR,arg[13]);
 
   if (nfileevery) {
-    if (narg != 16) error->all(FLERR,"Illegal fix ttm command");
+    if (narg != 17) error->all(FLERR,"Illegal fix ttm command");
     MPI_Comm_rank(world,&me);
     if (me == 0) {
-      fp = fopen(arg[15],"w");
+      fp = fopen(arg[14],"w");
       if (fp == NULL) {
         char str[128];
-        snprintf(str,128,"Cannot open fix ttm file %s",arg[15]);
+        snprintf(str,128,"Cannot open fix ttm file %s",arg[14]);
         error->one(FLERR,str);
       }
     }
@@ -118,8 +112,6 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
 
   // error check
 
-  if (seed <= 0)
-    error->all(FLERR,"Invalid random number seed in fix ttm command");
   if (electronic_specific_heat <= 0.0)
     error->all(FLERR,"Fix ttm electronic_specific_heat must be > 0.0");
   if (electronic_density <= 0.0)
@@ -131,12 +123,7 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
   if (v_0 < 0.0) error->all(FLERR,"Fix ttm v_0 must be >= 0.0");
   if (nxnodes <= 0 || nynodes <= 0 || nznodes <= 0)
     error->all(FLERR,"Fix ttm number of nodes must be > 0");
-
   v_0_sq = v_0*v_0;
-
-  // initialize Marsaglia RNG with processor-unique seed
-
-  random = new RanMars(lmp,seed + comm->me);
 
   // allocate per-type arrays for force prefactors
 
@@ -170,17 +157,6 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
   memory->create(net_energy_transfer_all,nxnodes,nynodes,nznodes,
                  "TTM:net_energy_transfer_all");
 
-  flangevin = NULL;
-  grow_arrays(atom->nmax);
-
-  // zero out the flangevin array
-
-  for (int i = 0; i < atom->nmax; i++) {
-    flangevin[i][0] = 0;
-    flangevin[i][1] = 0;
-    flangevin[i][2] = 0;
-  }
-
   atom->add_callback(0);
   atom->add_callback(1);
 
@@ -195,8 +171,6 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
 FixTTM::~FixTTM()
 {
   if (nfileevery && me == 0) fclose(fp);
-
-  delete random;
 
   delete [] gfactor1;
   delete [] gfactor2;
@@ -218,7 +192,6 @@ FixTTM::~FixTTM()
   memory->destroy(v_node_all);
   memory->destroy(w_node_all);
   memory->destroy(nvel_all);
-  memory->destroy(flangevin);
   memory->destroy(net_energy_transfer);
   memory->destroy(net_energy_transfer_all);
 }
@@ -228,8 +201,6 @@ FixTTM::~FixTTM()
 int FixTTM::setmask()
 {
   int mask = 0;
-  mask |= POST_FORCE;
-  mask |= POST_FORCE_RESPA;
   mask |= END_OF_STEP;
   return mask;
 }
@@ -238,24 +209,35 @@ int FixTTM::setmask()
 
 void FixTTM::init()
 {
+
+  int lenS=strlen(lang_fix_name);
+  char langName[lenS-1];
+  for (int i = 0; i < lenS; i++){
+     langName[i] = lang_fix_name[i];
+  }
+
+  for (int whichfix = 0; whichfix < modify->nfix; whichfix++) {
+
+     if (strcmp(langName,modify->fix[whichfix]->id) == 0){
+         id_lang = whichfix;
+         break;
+
+     }
+
+     if (whichfix == (modify->nfix-1)){
+
+         error->universe_all(FLERR,"langevin fix ID is not defined");
+
+     }
+
+  }
+
   if (domain->dimension == 2)
     error->all(FLERR,"Cannot use fix ttm with 2d simulation");
   if (domain->nonperiodic != 0)
-    error->all(FLERR,"Cannot use non-periodic boundares with fix ttm");
+    error->all(FLERR,"Cannot use non-periodic boundaries with fix ttm");
   if (domain->triclinic)
     error->all(FLERR,"Cannot use fix ttm with triclinic box");
-
-//  int tmp;
-//  int *dummy = (int *) modify->fix[whichfix]->extract("seed",tmp);
-//  seed = dummy[0];
-
-  // set force prefactors
-
-  for (int i = 1; i <= atom->ntypes; i++) {
-    gfactor1[i] = - gamma_p / force->ftm2v;
-    gfactor2[i] =
-      sqrt(24.0*force->boltz*gamma_p/update->dt/force->mvv2e) / force->ftm2v;
-  }
 
   for (int ixnode = 0; ixnode < nxnodes; ixnode++){
     for (int iynode = 0; iynode < nynodes; iynode++){
@@ -269,137 +251,9 @@ void FixTTM::init()
     }
   }
 
-  if (strstr(update->integrate_style,"respa"))                // same as in fix_langevin init (probably delete after everything is moved)
-    nlevels_respa = ((Respa *) update->integrate)->nlevels;
-
 }
 
 /* ---------------------------------------------------------------------- */
-
-void FixTTM::setup(int vflag)                   // same as in fix_langevin (probably delete after everthing is moved)
-{
-  if (strstr(update->integrate_style,"verlet"))
-    post_force_setup(vflag);
-  else {
-    ((Respa *) update->integrate)->copy_flevel_f(nlevels_respa-1);
-    post_force_respa_setup(vflag,nlevels_respa-1,0);
-    ((Respa *) update->integrate)->copy_f_flevel(nlevels_respa-1);
-  }
-}
-
-/* ---------------------------------------------------------------------- */
-
-void FixTTM::post_force(int /*vflag*/)
-{
-  double **x = atom->x;
-  double **v = atom->v;
-  double **f = atom->f;
-  int *type = atom->type;
-  int *mask = atom->mask;
-  int nlocal = atom->nlocal;
-
-  double gamma1,gamma2;
-//  compute_target();
-  
-  if (temperature!=0){
-     temperature->compute_scalar();
-  }
-
-  // apply damping and thermostat to all atoms in fix group
-
-  for (int i = 0; i < nlocal; i++) {
-    if (mask[i] & groupbit) {
-
-      double xscale = (x[i][0] - domain->boxlo[0])/domain->xprd;
-      double yscale = (x[i][1] - domain->boxlo[1])/domain->yprd;
-      double zscale = (x[i][2] - domain->boxlo[2])/domain->zprd;
-      int ixnode = static_cast<int>(xscale*nxnodes);
-      int iynode = static_cast<int>(yscale*nynodes);
-      int iznode = static_cast<int>(zscale*nznodes);
-      while (ixnode > nxnodes-1) ixnode -= nxnodes;
-      while (iynode > nynodes-1) iynode -= nynodes;
-      while (iznode > nznodes-1) iznode -= nznodes;
-      while (ixnode < 0) ixnode += nxnodes;
-      while (iynode < 0) iynode += nynodes;
-      while (iznode < 0) iznode += nznodes;
-
-      if (T_electron[ixnode][iynode][iznode] < 0)
-        error->all(FLERR,"Electronic temperature dropped below zero");
-      
-      if (temperature!=0){
-         temperature->remove_bias(i,v[i]);
-      } 
-
-      double tsqrt = sqrt(T_electron[ixnode][iynode][iznode]);
-
-      gamma1 = gfactor1[type[i]];
-      double vsq = v[i][0]*v[i][0] + v[i][1]*v[i][1] + v[i][2]*v[i][2];
-      if (vsq > v_0_sq) gamma1 *= (gamma_p + gamma_s)/gamma_p;
-      gamma2 = gfactor2[type[i]] * tsqrt;
-
-//      temperature->remove_bias(i,v[i]);
-      flangevin[i][0] = gamma1*v[i][0] + gamma2*(random->uniform()-0.5);
-      flangevin[i][1] = gamma1*v[i][1] + gamma2*(random->uniform()-0.5);
-      flangevin[i][2] = gamma1*v[i][2] + gamma2*(random->uniform()-0.5);
-
-      if (temperature!=0){
-         temperature->restore_bias(i,v[i]);
-      }
-
-      f[i][0] += flangevin[i][0];
-      f[i][1] += flangevin[i][1];
-      f[i][2] += flangevin[i][2];
-
-    }
-  }
-}
-
-/* ---------------------------------------------------------------------- */
-
-void FixTTM::post_force_setup(int /*vflag*/)
-{
-  double **f = atom->f;
-  int *mask = atom->mask;
-  int nlocal = atom->nlocal;
-
-  // apply langevin forces that have been stored from previous run
-
-  for (int i = 0; i < nlocal; i++) {
-    if (mask[i] & groupbit) {
-      f[i][0] += flangevin[i][0];
-      f[i][1] += flangevin[i][1];
-      f[i][2] += flangevin[i][2];
-    }
-  }
-}
-
-/* ---------------------------------------------------------------------- */
-
-void FixTTM::post_force_respa(int vflag, int ilevel, int /*iloop*/)
-{
-  if (ilevel == nlevels_respa-1) post_force(vflag);
-}
-
-/* ---------------------------------------------------------------------- */
-
-void FixTTM::post_force_respa_setup(int vflag, int ilevel, int /*iloop*/)
-{
-  if (ilevel == nlevels_respa-1) post_force_setup(vflag);
-}
-
-/* ---------------------------------------------------------------------- */
-
-void FixTTM::reset_dt()
-{
-  for (int i = 1; i <= atom->ntypes; i++)
-    gfactor2[i] =
-      sqrt(24.0*force->boltz*gamma_p/update->dt/force->mvv2e) / force->ftm2v;
-}
-
-/* ----------------------------------------------------------------------
-   read in initial electron temperatures from a user-specified file
-   only called by proc 0
-------------------------------------------------------------------------- */
 
 void FixTTM::read_initial_electron_temperatures()
 {
@@ -448,8 +302,11 @@ void FixTTM::end_of_step()
   double *rmass = atom->rmass;
   int *type = atom->type;
   int *mask = atom->mask;
-  int nlocal = atom->nlocal;
-//  std::cout <<"\n\nnumber: " << nlocal;
+  int nlocal = atom->nlocal;              
+
+  int tmp;
+  double **flangevin = (double **) modify->fix[id_lang]->extract("flangevin",tmp);
+
   for (int ixnode = 0; ixnode < nxnodes; ixnode++){
     for (int iynode = 0; iynode < nynodes; iynode++){
       for (int iznode = 0; iznode < nznodes; iznode++){
@@ -524,16 +381,18 @@ void FixTTM::end_of_step()
   for (int ith_inner_timestep = 0; ith_inner_timestep < num_inner_timesteps;
        ith_inner_timestep++) {
 
-    for (int ixnode = 0; ixnode < nxnodes; ixnode++)
-      for (int iynode = 0; iynode < nynodes; iynode++)
-        for (int iznode = 0; iznode < nznodes; iznode++)
-          T_electron_old[ixnode][iynode][iznode] =
-            T_electron[ixnode][iynode][iznode];
+    for (int ixnode = 0; ixnode < nxnodes; ixnode++){
+      for (int iynode = 0; iynode < nynodes; iynode++){
+        for (int iznode = 0; iznode < nznodes; iznode++){
+          T_electron_old[ixnode][iynode][iznode] = T_electron[ixnode][iynode][iznode];
+        }
+      }
+    }
 
     // compute new electron T profile
 
-    for (int ixnode = 0; ixnode < nxnodes; ixnode++)
-      for (int iynode = 0; iynode < nynodes; iynode++)
+    for (int ixnode = 0; ixnode < nxnodes; ixnode++) {
+      for (int iynode = 0; iynode < nynodes; iynode++) {
         for (int iznode = 0; iznode < nznodes; iznode++) {
           int right_xnode = ixnode + 1;
           int right_ynode = iynode + 1;
@@ -547,25 +406,6 @@ void FixTTM::end_of_step()
           if (left_xnode == -1) left_xnode = nxnodes - 1;
           if (left_ynode == -1) left_ynode = nynodes - 1;
           if (left_znode == -1) left_znode = nznodes - 1;
-
-
-// Boundary conditions for test case
-
-          if(iynode == 0){
-
-		T_electron[ixnode][iynode][iznode] = 0.1;
-
-          }
-
-	  else if (iynode == nynodes - 1){
-
-		T_electron[ixnode][iynode][iznode] = 0.8;
-
-          }
-
-/////////////////////////////////////
-
-	  else {
 
           T_electron[ixnode][iynode][iznode] =
             T_electron_old[ixnode][iynode][iznode] +
@@ -588,8 +428,10 @@ void FixTTM::end_of_step()
               w_node_all[ixnode][iynode][iznode]*T_electron_old[ixnode][iynode][right_znode]*(0.5*(inner_dt/dz)/nvel_all[ixnode][iynode][iznode]) +
               w_node_all[ixnode][iynode][iznode]*T_electron_old[ixnode][iynode][left_znode]*(0.5*(inner_dt/dz)/nvel_all[ixnode][iynode][iznode]);
 
-            }
         }
+      }
+    }
+
   }
 
   // output nodal temperatures for current timestep
@@ -678,15 +520,6 @@ double FixTTM::memory_usage()
   return bytes;
 }
 
-/* ---------------------------------------------------------------------- */
-
-void FixTTM::grow_arrays(int ngrow)
-{
-
- memory->grow(flangevin,ngrow,3,"FixLangevinTTM:flangevin");
-
-}
-
 /* ----------------------------------------------------------------------
   return the energy of the electronic subsystem or the net_energy transfer
    between the subsystems
@@ -724,10 +557,9 @@ double FixTTM::compute_vector(int n)
 void FixTTM::write_restart(FILE *fp)
 {
   double *rlist;
-  memory->create(rlist,nxnodes*nynodes*nznodes+1,"TTM:rlist");
+  memory->create(rlist,nxnodes*nynodes*nznodes,"TTM:rlist");
 
   int n = 0;
-  rlist[n++] = seed;
 
   for (int ixnode = 0; ixnode < nxnodes; ixnode++)
     for (int iynode = 0; iynode < nynodes; iynode++)
@@ -752,67 +584,11 @@ void FixTTM::restart(char *buf)
   int n = 0;
   double *rlist = (double *) buf;
 
-  // the seed must be changed from the initial seed
-
-  seed = static_cast<int> (0.5*rlist[n++]);
-
   for (int ixnode = 0; ixnode < nxnodes; ixnode++)
     for (int iynode = 0; iynode < nynodes; iynode++)
       for (int iznode = 0; iznode < nznodes; iznode++)
         T_electron[ixnode][iynode][iznode] = rlist[n++];
 
-  delete random;
-  random = new RanMars(lmp,seed+comm->me);
-}
-
-/* ----------------------------------------------------------------------
-   pack values in local atom-based arrays for restart file
-------------------------------------------------------------------------- */
-
-int FixTTM::pack_restart(int i, double *buf)
-{
-  buf[0] = 4;
-  buf[1] = flangevin[i][0];
-  buf[2] = flangevin[i][1];
-  buf[3] = flangevin[i][2];
-  return 4;
-}
-
-/* ----------------------------------------------------------------------
-   unpack values from atom->extra array to restart the fix
-------------------------------------------------------------------------- */
-
-void FixTTM::unpack_restart(int nlocal, int nth)
-{
-  double **extra = atom->extra;
-
-  // skip to Nth set of extra values
-
-  int m = 0;
-  for (int i = 0; i < nth; i++) m += static_cast<int> (extra[nlocal][m]);
-  m++;
-
-  flangevin[nlocal][0] = extra[nlocal][m++];
-  flangevin[nlocal][1] = extra[nlocal][m++];
-  flangevin[nlocal][2] = extra[nlocal][m++];
-}
-
-/* ----------------------------------------------------------------------
-   maxsize of any atom's restart data
-------------------------------------------------------------------------- */
-
-int FixTTM::maxsize_restart()
-{
-  return 4;
-}
-
-/* ----------------------------------------------------------------------
-   size of atom nlocal's restart data
-------------------------------------------------------------------------- */
-
-int FixTTM::size_restart(int /*nlocal*/)
-{
-  return 4;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -842,12 +618,11 @@ int FixTTM::modify_param(int narg, char **arg)
 }
 
 /* ----------------------------------------------------------------------
- *    sending properties to fix langevin properties
+ *    sending properties to fix langevin
  *    ------------------------------------------------------------------------- */
 
 void *FixTTM::extract(const char *str, int &dim)
 {
-//  dim = 0;
   if (strcmp(str,"electron_temperature") == 0) {
     dim = 3;
     return T_electron;
@@ -855,10 +630,6 @@ void *FixTTM::extract(const char *str, int &dim)
   if (strcmp(str,"nodes") == 0) {
     dim = 1;
     return nodes_xyz;
-  }
-  if (strcmp(str,"seed") == 0) {
-    dim = 1;
-    return &seed;
   }
   if (strcmp(str,"gamma_p") == 0) {
     dim = 1;
@@ -871,6 +642,14 @@ void *FixTTM::extract(const char *str, int &dim)
   if (strcmp(str,"v_0") == 0) {
     dim = 1;
     return &v_0;
+  }
+  if (strcmp(str,"temperature") == 0) {
+    dim = 1;
+    return temperature;
+  }
+  if (strcmp(str,"flangevin") == 0) {
+    dim = 2;
+    return flangevin;
   }
   return NULL;
 }
