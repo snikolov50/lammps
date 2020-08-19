@@ -774,7 +774,7 @@ void FixLangevin::post_force_templated()
       if (Tp_TSTYLEATOM && ttmflag==0){
          tsqrt = sqrt(tforce[i]);
       }
-      else{
+      else if (Tp_TSTYLEATOM && ttmflag==1) {
          tsqrt = sqrt(tforce[i]);
          if (Tp_BIAS) {
             temperature->remove_bias(i,v[i]);
