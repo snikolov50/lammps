@@ -68,10 +68,9 @@ FixLangevin::FixLangevin(LAMMPS *lmp, int narg, char **arg) :
 
      if (strcmp(arg[index],"ttm")==0){
         ttmflag = 1;
-        tallyflag = 1;
         ttmfix = arg[index+1];
-        int ttm_arg_index = index;
      }
+
   }
 
   if (ttmflag==1) {
@@ -80,17 +79,11 @@ FixLangevin::FixLangevin(LAMMPS *lmp, int narg, char **arg) :
 
        if (strcmp(ttmfix,modify->fix[whichfix]->id) == 0){
              ttm_id = whichfix;
-             int tmp;
-             LAMMPS_NS::Compute *dummy5 = (LAMMPS_NS::Compute *) modify->fix[ttm_id]->extract("temperature",tmp);
-             temperature = dummy5;
              break;
        }
        
-
        if (whichfix == (modify->nfix-1)){
-
             error->universe_all(FLERR,"ttm fix ID is not defined");
-
        }
 
      }
@@ -129,11 +122,6 @@ FixLangevin::FixLangevin(LAMMPS *lmp, int narg, char **arg) :
          t_stop = force->numeric(FLERR,arg[4]);
          t_period = force->numeric(FLERR,arg[5]);
          seed = force->inumeric(FLERR,arg[6]);
-
-//  if (strcmp(arg[3], "ttm")==0) {
-//     ttmflag = 1;
-//     ttmfix = arg[4];
-//  }
 
        if (t_period <= 0.0) error->all(FLERR,"Fix langevin period must be > 0.0");
        if (seed <= 0) error->all(FLERR,"Illegal fix langevin command");
@@ -214,9 +202,6 @@ FixLangevin::FixLangevin(LAMMPS *lmp, int narg, char **arg) :
   }
 
   // set temperature = NULL, user can override via fix_modify if wants bias
-
-//  id_temp = NULL;
-//  temperature = NULL;
 
   energy = 0.0;
 
@@ -337,34 +322,31 @@ void FixLangevin::init()
   }
   
   if (ttmflag==1){
-
-     tallyflag = 1;
-     tstyle = ATOM;
-//     int *dummy0 = (int *) modify->fix[whichfix]->extract("seed",tmp);
-//     seed = dummy0[0];
      int tmp;
-     double *dummy1 = (double *) modify->fix[ttm_id]->extract("gamma_p",tmp);
-     gamma_p = dummy1[0];
-     double *dummy2 = (double *) modify->fix[ttm_id]->extract("gamma_s",tmp);
-     gamma_s = dummy2[0];
-     double *dummy3 = (double *) modify->fix[ttm_id]->extract("v_0",tmp);
-     v_0 = dummy3[0];
-     v_0_sq = v_0*v_0;
+     ttmbias = (int *) modify->fix[ttm_id]->extract("biasflag",tmp);
 
-    if (atom->nmax > maxatom1) {
-      memory->destroy(flangevin);
-      maxatom1 = atom->nmax;
-      memory->create(flangevin,maxatom1,3,"langevin:flangevin");
-    }
-
-    flangevin_allocated = 1;
-
-     for (int i = 0; i < atom->nmax; i++) {
-         flangevin[i][0] = 0;
-         flangevin[i][1] = 0;
-         flangevin[i][2] = 0;
+     if (temperature && temperature->tempbias){
+        temperature_ttm = (LAMMPS_NS::Compute *) modify->fix[ttm_id]->extract("temperature",tmp);
+        if (temperature_ttm!=0){
+           if (temperature_ttm->id != temperature->id){
+              error->universe_all(FLERR,"two temperature computes given for removing velocity bias");
+           }
+        }
      }
 
+     else if (temperature == 0 && ttmbias[0]==1){
+        temperature = (LAMMPS_NS::Compute *) modify->fix[ttm_id]->extract("temperature",tmp);
+     }
+
+     tstyle = ATOM;
+     tallyflag = 1;
+     double *dummy2 = (double *) modify->fix[ttm_id]->extract("gamma_p",tmp);
+     gamma_p = dummy2[0];
+     double *dummy3 = (double *) modify->fix[ttm_id]->extract("gamma_s",tmp);
+     gamma_s = dummy3[0];
+     double *dummy4 = (double *) modify->fix[ttm_id]->extract("v_0",tmp);
+     v_0 = dummy4[0];
+     v_0_sq = v_0*v_0;
 
   }
   
@@ -733,7 +715,7 @@ void FixLangevin::post_force_templated()
   double dt = update->dt;
   double mvv2e = force->mvv2e;
   double ftm2v = force->ftm2v;
-
+  
   compute_target();
 
   if (Tp_ZERO) {
@@ -747,23 +729,12 @@ void FixLangevin::post_force_templated()
 
   if (Tp_TALLY) {
 
-       if (ttmflag==0){ 
-
-	    if (atom->nmax > maxatom1) {
-	      memory->destroy(flangevin);
-	      maxatom1 = atom->nmax;
-	      memory->create(flangevin,maxatom1,3,"langevin:flangevin");
-	    }
-	    flangevin_allocated = 1;
-
-       }
-
-       else{
-
-              int tmp;
-              double **flangevin = (double **) modify->fix[ttm_id]->extract("flangevin",tmp);
-
-       }
+    if (atom->nmax > maxatom1) {
+      memory->destroy(flangevin);
+      maxatom1 = atom->nmax;
+      memory->create(flangevin,maxatom1,3,"langevin:flangevin");
+    }
+    flangevin_allocated = 1;
 
   }
 
@@ -1278,9 +1249,7 @@ double FixLangevin::compute_scalar()
 
   double energy_all;
   MPI_Allreduce(&energy_me,&energy_all,1,MPI_DOUBLE,MPI_SUM,world);
-  return -energy_all;
 }
-
 /* ----------------------------------------------------------------------
    extract thermostat properties
 ------------------------------------------------------------------------- */
@@ -1298,6 +1267,14 @@ void *FixLangevin::extract(const char *str, int &dim)
   if (strcmp(str,"flangevin") == 0) {
     dim = 2;
     return flangevin;
+  }
+  if (strcmp(str,"biasflag") == 0) {
+    dim = 1;
+    return &tbiasflag;
+  }
+  if (strcmp(str,"temperature") == 0) {
+    dim = 1;
+    return temperature;
   }
   return NULL;
 }

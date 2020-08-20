@@ -40,16 +40,16 @@ class FixLangevin : public Fix {
   int modify_param(int, char **);
   virtual double compute_scalar();
   double memory_usage();
-  virtual void *extract(const char *, int &);
+  virtual void *extract(const char *, int&);
   void grow_arrays(int);
   void copy_arrays(int, int, int);
   int pack_exchange(int, double *);
   int unpack_exchange(int, double *);
-//  virtual void *extract(const char *, int&);
 
  protected:
   int gjfflag,nvalues,osflag,oflag,tallyflag,zeroflag,tbiasflag,ttmflag;
   int ttm_id;
+  int *ttmbias;
   int flangevin_allocated;
   int whichfix;
   double ascale,v_0,v_0_sq;
@@ -71,6 +71,7 @@ class FixLangevin : public Fix {
 
   char *id_temp;
   class Compute *temperature;
+  class Compute *temperature_ttm;
 
   int nlevels_respa;
   class RanMars *random;

@@ -42,12 +42,17 @@ class FixTTM : public Fix {
  protected:
   char *id_temp;
   class Compute *temperature;
+  class Compute *temperature_lang;
 
  private:
 //  char langName[100] = NULL;
   int lang_arg_index;
   int me;
+  int Nlimit;
+  int convflag;
   int id_lang;
+  int *langbias;  
+  int biasflag;
   int nfileevery;
   int nlevels_respa;
   FILE *fp,*fpr;
@@ -69,7 +74,7 @@ class FixTTM : public Fix {
   double electronic_specific_heat,electronic_density;
   double electronic_thermal_conductivity;
   double gamma_p,gamma_s,v_0,v_0_sq;
-
+  int check_temp_flag;
   void read_initial_electron_temperatures();
 };
 
