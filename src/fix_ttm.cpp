@@ -62,13 +62,18 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
   id_temp = NULL;
   temperature = NULL;
   check_temp_flag = 0;
+  int conv_err = 1;
+  int lang_err = 1;
+
   for (int index = 0; index < (narg-1); index++){
 
      if (strcmp(arg[index],"lang")==0){
         strncpy(lang_fix_name,arg[index+1],100); 
+        lang_err = 0;
      }
 
      if (strcmp(arg[index],"conv")==0){
+         conv_err = 0;
          Nlimit = force->inumeric(FLERR,arg[index+2]);
          if (arg[index+1]=="yes"){
             convflag = 1;
@@ -78,7 +83,9 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
          }
      }
   }
-
+  
+  if (lang_err == 1) {error->all(FLERR,"No langevin fix coupled to fix ttm");}
+  if (conv_err == 1) {error->all(FLERR,"No convective option specified");}
   electronic_specific_heat = force->numeric(FLERR,arg[3]);
   electronic_density = force->numeric(FLERR,arg[4]);
   electronic_thermal_conductivity = force->numeric(FLERR,arg[5]);
