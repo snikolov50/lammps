@@ -45,6 +45,7 @@ class FixLangevin : public Fix {
   void copy_arrays(int, int, int);
   int pack_exchange(int, double *);
   int unpack_exchange(int, double *);
+  void post_force_setup(int);
 
  protected:
   int gjfflag,nvalues,osflag,oflag,tallyflag,zeroflag,tbiasflag,ttmflag;

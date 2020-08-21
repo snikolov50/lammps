@@ -75,7 +75,7 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
      if (strcmp(arg[index],"conv")==0){
          conv_err = 0;
          Nlimit = force->inumeric(FLERR,arg[index+2]);
-         if (arg[index+1]=="yes"){
+         if (strcmp(arg[index+1],"yes") == 0){
             convflag = 1;
          }
          else {
@@ -346,11 +346,11 @@ void FixTTM::end_of_step()
         w_node[ixnode][iynode][iznode] = 0;
         nvel[ixnode][iynode][iznode] = 0;
 
-       }
-     }
-   }
+      }
+    }
+  }
 
-  for (int i = 0; i < nlocal; i++)
+  for (int i = 0; i < nlocal; i++){
     if (mask[i] & groupbit) {
       double xscale = (x[i][0] - domain->boxlo[0])/domain->xprd;
       double yscale = (x[i][1] - domain->boxlo[1])/domain->yprd;
@@ -380,6 +380,7 @@ void FixTTM::end_of_step()
         (flangevin[i][0]*v[i][0] + flangevin[i][1]*v[i][1] +
          flangevin[i][2]*v[i][2]);
     }
+  }
 
   MPI_Allreduce(&net_energy_transfer[0][0][0],&net_energy_transfer_all[0][0][0],total_nnodes,MPI_DOUBLE,MPI_SUM,world);
   MPI_Allreduce(&u_node[0][0][0],&u_node_all[0][0][0],total_nnodes,MPI_DOUBLE,MPI_SUM,world);
@@ -462,7 +463,7 @@ void FixTTM::end_of_step()
              w_node_all[ixnode][iynode][iznode]*T_electron_old[ixnode][iynode][left_znode]*(0.5*(inner_dt/dz)/nvel_all[ixnode][iynode][iznode]);
           } 
 
-          else {
+          else if (convflag == 0){
              T_electron[ixnode][iynode][iznode] =
              T_electron_old[ixnode][iynode][iznode] +
              inner_dt/(electronic_specific_heat*electronic_density) *
@@ -587,7 +588,6 @@ double FixTTM::compute_vector(int n)
   double del_vol = dx*dy*dz;
   int    grid_cells_low_count = 0;
   int    min_atoms_in_cell = 100000000;
-//  int    dummy = 100000000;
 
   for (int ixnode = 0; ixnode < nxnodes; ixnode++)
     for (int iynode = 0; iynode < nynodes; iynode++)

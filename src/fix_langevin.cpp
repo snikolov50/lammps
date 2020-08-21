@@ -90,7 +90,13 @@ FixLangevin::FixLangevin(LAMMPS *lmp, int narg, char **arg) :
 
      seed = force->inumeric(FLERR,arg[5]);
      if (seed <= 0) error->all(FLERR,"Illegal fix langevin command");
-
+     memory->grow(flangevin,atom->nmax,3,"TTM:flangevin");
+     for (int i = 0; i < atom->nmax; i++) {
+         flangevin[i][0] = 0;
+         flangevin[i][1] = 0;
+         flangevin[i][2] = 0;
+     }
+     maxatom1 = atom->nmax;
   }
 
   else {
@@ -209,13 +215,14 @@ FixLangevin::FixLangevin(LAMMPS *lmp, int narg, char **arg) :
   // compute_scalar checks for this and returns 0.0
   // if flangevin_allocated is not set
 
-  flangevin = NULL;
-  flangevin_allocated = 0;
-  franprev = NULL;
-  lv = NULL;
-  tforce = NULL;
-  maxatom1 = maxatom2 = 0;
-
+  if (ttmflag==0){
+	  flangevin = NULL;
+	  flangevin_allocated = 0;
+	  franprev = NULL;
+	  lv = NULL;
+	  tforce = NULL;
+	  maxatom1 = maxatom2 = 0;
+  }
   // setup atom-based array for franprev
   // register with Atom class
   // no need to set peratom_flag, b/c data is for internal use only
@@ -461,7 +468,12 @@ void FixLangevin::setup(int vflag)
     }
   }
   if (strstr(update->integrate_style,"verlet"))
-    post_force(vflag);
+     if (ttmflag == 0){
+        post_force(vflag);
+     }
+     else {
+        post_force_setup(vflag);     
+     }
   else {
     ((Respa *) update->integrate)->copy_flevel_f(nlevels_respa-1);
     post_force_respa(vflag,nlevels_respa-1,0);
@@ -666,9 +678,34 @@ void FixLangevin::post_force(int /*vflag*/)
 
 void FixLangevin::post_force_respa(int vflag, int ilevel, int /*iloop*/)
 {
-  if (ilevel == nlevels_respa-1) post_force(vflag);
+  if (ttmflag == 1){
+  	if (ilevel == nlevels_respa-1) post_force_setup(vflag);
+  }
+  else {
+        if (ilevel == nlevels_respa-1) post_force(vflag);
+  }
 }
 
+/* ---------------------------------------------------------------------- */
+
+void FixLangevin::post_force_setup(int /*vflag*/)
+{
+  double **f = atom->f;
+  int *mask = atom->mask;
+  int nlocal = atom->nlocal;
+
+  // apply langevin forces that have been stored from previous run
+
+  for (int i = 0; i < nlocal; i++) {
+    if (mask[i] & groupbit) {
+      f[i][0] += flangevin[i][0];
+      f[i][1] += flangevin[i][1];
+      f[i][2] += flangevin[i][2];
+    }
+  }
+}
+
+/* ---------------------------------------------------------------------- */
 /* ----------------------------------------------------------------------
    modify forces using one of the many Langevin styles
 ------------------------------------------------------------------------- */
@@ -949,7 +986,7 @@ void FixLangevin::compute_target()
         memory->create(tforce,maxatom2,"langevin:tforce");
       }
 
-      for (int i = 0; i < nlocal; i++)
+      for (int i = 0; i < nlocal; i++){
         if (mask[i] & groupbit){
 
             double xscale = (x[i][0] - domain->boxlo[0])/domain->xprd;
@@ -966,9 +1003,11 @@ void FixLangevin::compute_target()
             while (iznode < 0) iznode += nznodes;
 
             tforce[i] = T_electron[ixnode][iynode][iznode];
-            if (tforce[i] < 0.0)
-              error->one(FLERR, "Fix ttm returned negative electron temperature");
+            if (tforce[i] < 0.0){
+               error->one(FLERR, "Fix ttm returned negative electron temperature");
+            }
         }
+      }
     }
 
     modify->addstep_compute(update->ntimestep + 1);
