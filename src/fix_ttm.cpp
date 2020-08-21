@@ -52,7 +52,7 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
   if (narg < 20) error->all(FLERR,"Illegal fix ttm command");
 
   vector_flag = 1;
-  size_vector = 2;
+  size_vector = 4;
   global_freq = 1;
   extvector = 1;
   nevery = 1;
