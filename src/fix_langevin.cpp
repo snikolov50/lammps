@@ -42,7 +42,6 @@
 #include "pointers.h"
 #include "domain.h"
 #include "fix_ttm.h"
-#include "fix_ttm.cpp"
 
 using namespace LAMMPS_NS;
 using namespace FixConst;
