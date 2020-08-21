@@ -87,10 +87,11 @@ FixLangevin::FixLangevin(LAMMPS *lmp, int narg, char **arg) :
        }
 
      }
-
+     int tmp;
+     estopflag = (int *) modify->fix[ttm_id]->extract("estopflag",tmp);
      seed = force->inumeric(FLERR,arg[5]);
      if (seed <= 0) error->all(FLERR,"Illegal fix langevin command");
-     memory->grow(flangevin,atom->nmax,3,"TTM:flangevin");
+     memory->grow(flangevin,atom->nmax,3,"langevin:flangevin");
      for (int i = 0; i < atom->nmax; i++) {
          flangevin[i][0] = 0;
          flangevin[i][1] = 0;
@@ -784,20 +785,22 @@ void FixLangevin::post_force_templated()
       }
       else if (Tp_TSTYLEATOM && ttmflag==1) {
          tsqrt = sqrt(tforce[i]);
-         if (Tp_BIAS) {
-            temperature->remove_bias(i,v[i]);
-            double vsq = v[i][0]*v[i][0] + v[i][1]*v[i][1] + v[i][2]*v[i][2];
-            temperature->restore_bias(i,v[i]);
-            if (vsq > v_0_sq){
-               gamma1 *= (gamma_p + gamma_s)/gamma_p;
+         if (estopflag[0]==1){
+            if (Tp_BIAS) {
+               temperature->remove_bias(i,v[i]);
+               double vsq = v[i][0]*v[i][0] + v[i][1]*v[i][1] + v[i][2]*v[i][2];
+               temperature->restore_bias(i,v[i]);
+               if (vsq > v_0_sq){
+                  gamma1 *= (gamma_p + gamma_s)/gamma_p;
+               }
             }
-         }
-         else {
-            double vsq = v[i][0]*v[i][0] + v[i][1]*v[i][1] + v[i][2]*v[i][2];
-            if (vsq > v_0_sq){
-               gamma1 *= (gamma_p + gamma_s)/gamma_p;
+            else {
+               double vsq = v[i][0]*v[i][0] + v[i][1]*v[i][1] + v[i][2]*v[i][2];
+               if (vsq > v_0_sq){
+                  gamma1 *= (gamma_p + gamma_s)/gamma_p;
+               }
             }
-         }
+         } 
       }
       if (Tp_RMASS) {
           gamma1 = -rmass[i] / t_period / ftm2v;

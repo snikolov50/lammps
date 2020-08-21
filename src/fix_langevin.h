@@ -49,6 +49,7 @@ class FixLangevin : public Fix {
 
  protected:
   int gjfflag,nvalues,osflag,oflag,tallyflag,zeroflag,tbiasflag,ttmflag;
+  int *estopflag;
   int ttm_id;
   int *ttmbias;
   int flangevin_allocated;

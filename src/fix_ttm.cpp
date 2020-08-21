@@ -49,7 +49,7 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
   net_energy_transfer(NULL), net_energy_transfer_all(NULL), u_node(NULL), v_node(NULL), w_node(NULL), nvel(NULL),
   u_node_all(NULL), v_node_all(NULL), w_node_all(NULL), nvel_all(NULL), id_lang(NULL)
 {
-  if (narg < 20) error->all(FLERR,"Illegal fix ttm command");
+  if (narg < 22) error->all(FLERR,"Illegal fix ttm command");
 
   vector_flag = 1;
   size_vector = 4;
@@ -64,16 +64,19 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
   check_temp_flag = 0;
   int conv_err = 1;
   int lang_err = 1;
+  int estop_err = 1;
 
   for (int index = 0; index < (narg-1); index++){
 
      if (strcmp(arg[index],"lang")==0){
+        if (index+1 > narg-1) {error->all(FLERR,"Improper lang option for fix ttm");}
         strncpy(lang_fix_name,arg[index+1],100); 
         lang_err = 0;
      }
 
      if (strcmp(arg[index],"conv")==0){
          conv_err = 0;
+         if (index+2 > narg-1) {error->all(FLERR,"Improper conv option for fix ttm");}
          Nlimit = force->inumeric(FLERR,arg[index+2]);
          if (strcmp(arg[index+1],"yes") == 0){
             convflag = 1;
@@ -82,10 +85,23 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
             convflag = 0;  
          }
      }
+
+     if (strcmp(arg[index],"e_stop")==0){
+        if (index+1 > narg-1) {error->all(FLERR,"Improper e_stop option for fix ttm");}
+        if (strcmp(arg[index+1],"yes") == 0){
+            estopflag = 1;
+        }
+        else {
+            estopflag = 0;
+        }
+        estop_err = 0;
+     }
+
   }
   
-  if (lang_err == 1) {error->all(FLERR,"No langevin fix coupled to fix ttm");}
-  if (conv_err == 1) {error->all(FLERR,"No convective option specified");}
+  if (lang_err == 1) {error->all(FLERR,"No langevin fix name provided: coupling to fix ttm not possible");}
+  if (conv_err == 1) {error->all(FLERR,"Convective option not specified");}
+  if (estop_err == 1) {error->all(FLERR,"Electron stopping option not specified");}
   electronic_specific_heat = force->numeric(FLERR,arg[3]);
   electronic_density = force->numeric(FLERR,arg[4]);
   electronic_thermal_conductivity = force->numeric(FLERR,arg[5]);
@@ -109,7 +125,7 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
   nfileevery = force->inumeric(FLERR,arg[13]);
 
   if (nfileevery) {
-    if (narg != 20) error->all(FLERR,"Illegal fix ttm command");
+    if (narg != 22) error->all(FLERR,"Illegal fix ttm command");
     MPI_Comm_rank(world,&me);
     if (me == 0) {
       fp = fopen(arg[14],"w");
@@ -709,6 +725,10 @@ void *FixTTM::extract(const char *str, int &dim)
   if (strcmp(str,"biasflag") == 0) {
     dim = 1;
     return &biasflag;
+  }
+  if (strcmp(str,"estopflag") == 0) {
+    dim = 1;
+    return &estopflag;
   }
   return NULL;
 }

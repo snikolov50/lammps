@@ -50,6 +50,7 @@ class FixTTM : public Fix {
   int me;
   int Nlimit;
   int convflag;
+  int estopflag;
   int id_lang;
   int *langbias;  
   int biasflag;
