@@ -809,7 +809,7 @@ void FixLangevin::compute_target()
       error->one(FLERR,"Fix langevin variable returned negative temperature");
     tsqrt = sqrt(t_target);
     modify->addstep_compute(update->ntimestep + 1);
-  } else if (tstyle == ATOM) {
+  } else if (tstyle == ATOM  && !ttmflag) {
     modify->clearstep_compute();
     if (atom->nmax > maxatom2) {
       maxatom2 = atom->nmax;

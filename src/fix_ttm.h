@@ -37,17 +37,13 @@ class FixTTM : public Fix {
   void restart(char *);
   double memory_usage();
   double compute_vector(int);
-//   int modify_param(int, char **);
-//   virtual void *extract(const char *, int&);
   char lang_fix_name[100];
 
  protected:
   char *id_temp;
-  //  class Compute *temperature;
   class Compute *temperature_lang;
 
  private:
-//  char langName[100] = NULL;
   int lang_arg_index;
   int me;
   int Nlimit;
