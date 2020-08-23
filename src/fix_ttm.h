@@ -30,18 +30,20 @@ class FixTTM : public Fix {
   ~FixTTM();
   int setmask();
   void init();
+  void setup(int);
+  void pre_force(int);
   void end_of_step();
   void write_restart(FILE *);
   void restart(char *);
   double memory_usage();
   double compute_vector(int);
-  int modify_param(int, char **);
-  virtual void *extract(const char *, int&);
+//   int modify_param(int, char **);
+//   virtual void *extract(const char *, int&);
   char lang_fix_name[100];
 
  protected:
   char *id_temp;
-  class Compute *temperature;
+  //  class Compute *temperature;
   class Compute *temperature_lang;
 
  private:
@@ -76,6 +78,7 @@ class FixTTM : public Fix {
   double electronic_thermal_conductivity;
   double gamma_p,gamma_s,v_0,v_0_sq;
   int check_temp_flag;
+  int maxatom;
   void read_initial_electron_temperatures();
 };
 

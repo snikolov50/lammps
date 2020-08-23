@@ -40,28 +40,23 @@ class FixLangevin : public Fix {
   int modify_param(int, char **);
   virtual double compute_scalar();
   double memory_usage();
-  virtual void *extract(const char *, int&);
+  virtual void *extract(const char *, int &);
   void grow_arrays(int);
   void copy_arrays(int, int, int);
   int pack_exchange(int, double *);
   int unpack_exchange(int, double *);
-  void post_force_setup(int);
 
  protected:
-  int gjfflag,nvalues,osflag,oflag,tallyflag,zeroflag,tbiasflag,ttmflag;
-  int *estopflag;
-  int ttm_id;
-  int *ttmbias;
+  int gjfflag,nvalues,osflag,oflag,tallyflag,zeroflag,tbiasflag;
   int flangevin_allocated;
-  int whichfix;
-  double ascale,v_0,v_0_sq;
-  double t_start,t_stop,t_period,t_target,gamma_p,gamma_s;
+  double ascale;
+  double t_start,t_stop,t_period,t_target;
   double *gfactor1,*gfactor2,*ratio;
   double energy,energy_onestep;
   double tsqrt;
   int tstyle,tvar;
   double gjfa, gjfsib; //gjf a and gjf sqrt inverse b
-  char *tstr, *ttmfix;
+  char *tstr;
 
   class AtomVecEllipsoid *avec;
 
@@ -73,7 +68,6 @@ class FixLangevin : public Fix {
 
   char *id_temp;
   class Compute *temperature;
-  class Compute *temperature_ttm;
 
   int nlevels_respa;
   class RanMars *random;
@@ -86,6 +80,10 @@ class FixLangevin : public Fix {
   void omega_thermostat();
   void angmom_thermostat();
   void compute_target();
+
+  // ttm data
+
+  int ttmflag;
 };
 
 }

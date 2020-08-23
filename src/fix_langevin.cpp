@@ -39,9 +39,6 @@
 #include "error.h"
 #include "group.h"
 #include "utils.h"
-#include "pointers.h"
-#include "domain.h"
-#include "fix_ttm.h"
 
 using namespace LAMMPS_NS;
 using namespace FixConst;
@@ -63,76 +60,34 @@ FixLangevin::FixLangevin(LAMMPS *lmp, int narg, char **arg) :
   id_temp = NULL;
   temperature = NULL;
 
-  for (int index = 0; index < (narg-2); index++){
+  ttmflag = 1;
 
-     if (strcmp(arg[index],"ttm")==0){
-        ttmflag = 1;
-        ttmfix = arg[index+1];
-     }
+  if (narg < 7) error->all(FLERR,"Illegal fix langevin command");
 
-  }
-
-  if (ttmflag==1) {
-
-     for (int whichfix = 0; whichfix < modify->nfix; whichfix++) {
-
-       if (strcmp(ttmfix,modify->fix[whichfix]->id) == 0){
-             ttm_id = whichfix;
-             break;
-       }
-       
-       if (whichfix == (modify->nfix-1)){
-            error->universe_all(FLERR,"ttm fix ID is not defined");
-       }
-
-     }
-     int tmp;
-     estopflag = (int *) modify->fix[ttm_id]->extract("estopflag",tmp);
-     seed = force->inumeric(FLERR,arg[5]);
-     if (seed <= 0) error->all(FLERR,"Illegal fix langevin command");
-     memory->grow(flangevin,atom->nmax,3,"langevin:flangevin");
-     for (int i = 0; i < atom->nmax; i++) {
-         flangevin[i][0] = 0;
-         flangevin[i][1] = 0;
-         flangevin[i][2] = 0;
-     }
-     maxatom1 = atom->nmax;
-  }
-
-  else {
-
-      if (narg < 7) {
-
-         error->all(FLERR,"Illegal fix langevin command");
-
-      }
-
-//  if (narg < 7) error->all(FLERR,"Illegal fix langevin command");
-
-      dynamic_group_allow = 1;
-      scalar_flag = 1;
-      global_freq = 1;
-      extscalar = 1;
-      nevery = 1;
-
-      if (strstr(arg[3],"v_") == arg[3]) {
-         int n = strlen(&arg[3][2]) + 1;
-         tstr = new char[n];
-         strcpy(tstr,&arg[3][2]);
-      } else {
-         t_start = force->numeric(FLERR,arg[3]);
-         t_target = t_start;
-         tstyle = CONSTANT;
-      }   
-
-         t_stop = force->numeric(FLERR,arg[4]);
-         t_period = force->numeric(FLERR,arg[5]);
-         seed = force->inumeric(FLERR,arg[6]);
-
-       if (t_period <= 0.0) error->all(FLERR,"Fix langevin period must be > 0.0");
-       if (seed <= 0) error->all(FLERR,"Illegal fix langevin command");
-
-  }
+  dynamic_group_allow = 1;
+  scalar_flag = 1;
+  global_freq = 1;
+  extscalar = 1;
+  nevery = 1;
+  
+  if (strstr(arg[3],"v_") == arg[3]) {
+    int n = strlen(&arg[3][2]) + 1;
+    tstr = new char[n];
+    strcpy(tstr,&arg[3][2]);
+  } else {
+    t_start = force->numeric(FLERR,arg[3]);
+    t_target = t_start;
+    tstyle = CONSTANT;
+  }   
+  
+  t_stop = force->numeric(FLERR,arg[4]);
+  t_period = force->numeric(FLERR,arg[5]);
+  seed = force->inumeric(FLERR,arg[6]);
+  
+  if (t_period <= 0.0) error->all(FLERR,"Fix langevin period must be > 0.0");
+  if (seed <= 0) error->all(FLERR,"Illegal fix langevin command");
+  
+  //}
  
   // initialize Marsaglia RNG with processor-unique seed
 
@@ -215,14 +170,13 @@ FixLangevin::FixLangevin(LAMMPS *lmp, int narg, char **arg) :
   // compute_scalar checks for this and returns 0.0
   // if flangevin_allocated is not set
 
-  if (ttmflag==0){
-	  flangevin = NULL;
-	  flangevin_allocated = 0;
-	  franprev = NULL;
-	  lv = NULL;
-	  tforce = NULL;
-	  maxatom1 = maxatom2 = 0;
-  }
+  flangevin = NULL;
+  flangevin_allocated = 0;
+  franprev = NULL;
+  lv = NULL;
+  tforce = NULL;
+  maxatom1 = maxatom2 = 0;
+
   // setup atom-based array for franprev
   // register with Atom class
   // no need to set peratom_flag, b/c data is for internal use only
@@ -328,33 +282,9 @@ void FixLangevin::init()
           error->one(FLERR,"Fix langevin omega requires extended particles");
   }
   
-  if (ttmflag==1){
-     int tmp;
-     ttmbias = (int *) modify->fix[ttm_id]->extract("biasflag",tmp);
-
-     if (temperature && temperature->tempbias){
-        temperature_ttm = (LAMMPS_NS::Compute *) modify->fix[ttm_id]->extract("temperature",tmp);
-        if (temperature_ttm!=0){
-           if (temperature_ttm->id != temperature->id){
-              error->universe_all(FLERR,"two temperature computes given for removing velocity bias");
-           }
-        }
-     }
-
-     else if (temperature == 0 && ttmbias[0]==1){
-        temperature = (LAMMPS_NS::Compute *) modify->fix[ttm_id]->extract("temperature",tmp);
-     }
-
-     tstyle = ATOM;
-     tallyflag = 1;
-     double *dummy2 = (double *) modify->fix[ttm_id]->extract("gamma_p",tmp);
-     gamma_p = dummy2[0];
-     double *dummy3 = (double *) modify->fix[ttm_id]->extract("gamma_s",tmp);
-     gamma_s = dummy3[0];
-     double *dummy4 = (double *) modify->fix[ttm_id]->extract("v_0",tmp);
-     v_0 = dummy4[0];
-     v_0_sq = v_0*v_0;
-
+  if (ttmflag == 1) {
+    tstyle = ATOM;
+    tallyflag = 1;
   }
   
   if (ascale) {
@@ -378,27 +308,12 @@ void FixLangevin::init()
 
     for (int i = 1; i <= atom->ntypes; i++) {
 
-      if (ttmflag==0){
-         gfactor1[i] = -atom->mass[i] / t_period / force->ftm2v;
-      }
+        gfactor1[i] = -atom->mass[i] / t_period / force->ftm2v;
 
-      else{
-         gfactor1[i] = - gamma_p / force->ftm2v;
-      }
-
-      if (gjfflag){
-          gfactor2[i] = sqrt(atom->mass[i]) * sqrt(2.0*force->boltz/t_period/update->dt/force->mvv2e) / force->ftm2v;
-      }
-
-      else{
-
-	  if (ttmflag==0){
-             gfactor2[i] = sqrt(atom->mass[i]) * sqrt(24.0*force->boltz/t_period/update->dt/force->mvv2e) / force->ftm2v;
-          }
-          else{
-             gfactor2[i] = sqrt(24.0*force->boltz*gamma_p/update->dt/force->mvv2e) / force->ftm2v;
-          }
-
+      if (gjfflag)
+        gfactor2[i] = sqrt(atom->mass[i]) * sqrt(2.0*force->boltz/t_period/update->dt/force->mvv2e) / force->ftm2v;
+      else {
+        gfactor2[i] = sqrt(atom->mass[i]) * sqrt(24.0*force->boltz/t_period/update->dt/force->mvv2e) / force->ftm2v;
       }
 
       gfactor1[i] *= 1.0/ratio[i];
@@ -467,18 +382,15 @@ void FixLangevin::setup(int vflag)
         }
     }
   }
-  if (strstr(update->integrate_style,"verlet"))
-     if (ttmflag == 0){
-        post_force(vflag);
-     }
-     else {
-        post_force_setup(vflag);     
-     }
-  else {
+
+  if (strstr(update->integrate_style,"verlet")) {
+    post_force(vflag);
+  } else {
     ((Respa *) update->integrate)->copy_flevel_f(nlevels_respa-1);
     post_force_respa(vflag,nlevels_respa-1,0);
     ((Respa *) update->integrate)->copy_f_flevel(nlevels_respa-1);
   }
+
   if (gjfflag) {
     double dtfm;
     double dt = update->dt;
@@ -500,7 +412,6 @@ void FixLangevin::setup(int vflag)
           lv[i][1] = v[i][1];
           lv[i][2] = v[i][2];
         }
-//
     } else {
       for (int i = 0; i < nlocal; i++)
         if (mask[i] & groupbit) {
@@ -678,34 +589,9 @@ void FixLangevin::post_force(int /*vflag*/)
 
 void FixLangevin::post_force_respa(int vflag, int ilevel, int /*iloop*/)
 {
-  if (ttmflag == 1){
-  	if (ilevel == nlevels_respa-1) post_force_setup(vflag);
-  }
-  else {
-        if (ilevel == nlevels_respa-1) post_force(vflag);
-  }
+  if (ilevel == nlevels_respa-1) post_force(vflag);
 }
 
-/* ---------------------------------------------------------------------- */
-
-void FixLangevin::post_force_setup(int /*vflag*/)
-{
-  double **f = atom->f;
-  int *mask = atom->mask;
-  int nlocal = atom->nlocal;
-
-  // apply langevin forces that have been stored from previous run
-
-  for (int i = 0; i < nlocal; i++) {
-    if (mask[i] & groupbit) {
-      f[i][0] += flangevin[i][0];
-      f[i][1] += flangevin[i][1];
-      f[i][2] += flangevin[i][2];
-    }
-  }
-}
-
-/* ---------------------------------------------------------------------- */
 /* ----------------------------------------------------------------------
    modify forces using one of the many Langevin styles
 ------------------------------------------------------------------------- */
@@ -776,31 +662,13 @@ void FixLangevin::post_force_templated()
   }
 
   if (Tp_BIAS) temperature->compute_scalar();
-//  temperature->compute_scalar();
+
   for (int i = 0; i < nlocal; i++) {
     if (mask[i] & groupbit) {
-      if (Tp_TSTYLEATOM && ttmflag==0){
-         tsqrt = sqrt(tforce[i]);
+      if (Tp_TSTYLEATOM) {
+        tsqrt = sqrt(tforce[i]);
       }
-      else if (Tp_TSTYLEATOM && ttmflag==1) {
-         tsqrt = sqrt(tforce[i]);
-         if (estopflag[0]==1){
-            if (Tp_BIAS) {
-               temperature->remove_bias(i,v[i]);
-               double vsq = v[i][0]*v[i][0] + v[i][1]*v[i][1] + v[i][2]*v[i][2];
-               temperature->restore_bias(i,v[i]);
-               if (vsq > v_0_sq){
-                  gamma1 *= (gamma_p + gamma_s)/gamma_p;
-               }
-            }
-            else {
-               double vsq = v[i][0]*v[i][0] + v[i][1]*v[i][1] + v[i][2]*v[i][2];
-               if (vsq > v_0_sq){
-                  gamma1 *= (gamma_p + gamma_s)/gamma_p;
-               }
-            }
-         } 
-      }
+
       if (Tp_RMASS) {
           gamma1 = -rmass[i] / t_period / ftm2v;
         if (Tp_GJF)
@@ -937,85 +805,40 @@ void FixLangevin::compute_target()
   int *mask = atom->mask;
   int nlocal = atom->nlocal;
   double **x = atom->x;
-//  double **v = atom->v;
-//  double **f = atom->f;
+
   double delta = update->ntimestep - update->beginstep;
 
   if (delta != 0.0) delta /= update->endstep - update->beginstep;
 
   // if variable temp, evaluate variable, wrap with clear/add
   // reallocate tforce array if necessary
+  // if ttmflag on, tforce calculated by fix ttm in pre_force() 
 
   if (tstyle == CONSTANT) {
     t_target = t_start + delta * (t_stop-t_start);
     tsqrt = sqrt(t_target);
-  } else {
+  } else if (tstyle == EQUAL) {
     modify->clearstep_compute();
-    if (tstyle == EQUAL) {
-      t_target = input->variable->compute_equal(tvar);
-      if (t_target < 0.0)
-        error->one(FLERR,"Fix langevin variable returned negative temperature");
-      tsqrt = sqrt(t_target);
-    } 
-
-    else if (tstyle==ATOM && ttmflag==0) {
-
-      if (atom->nmax > maxatom2) {
-        maxatom2 = atom->nmax;
-        memory->destroy(tforce);
-        memory->create(tforce,maxatom2,"langevin:tforce");
-      }
-      input->variable->compute_atom(tvar,igroup,tforce,1,0);
-      for (int i = 0; i < nlocal; i++)
-        if (mask[i] & groupbit)
-            if (tforce[i] < 0.0)
-              error->one(FLERR, "Fix langevin variable returned negative temperature");
-
-    }
-
-    else {
-
-      int tmp;
-      double ***T_electron = (double ***) modify->fix[ttm_id]->extract("electron_temperature",tmp); 
-      int *nodes_xyz = (int *) modify->fix[ttm_id]->extract("nodes",tmp);
-      int nxnodes = nodes_xyz[0];
-      int nynodes = nodes_xyz[1];
-      int nznodes = nodes_xyz[2];
-
-      if (atom->nmax > maxatom2) {
-        maxatom2 = atom->nmax;
-        memory->destroy(tforce);
-        memory->create(tforce,maxatom2,"langevin:tforce");
-      }
-
-      for (int i = 0; i < nlocal; i++){
-        if (mask[i] & groupbit){
-
-            double xscale = (x[i][0] - domain->boxlo[0])/domain->xprd;
-            double yscale = (x[i][1] - domain->boxlo[1])/domain->yprd;
-            double zscale = (x[i][2] - domain->boxlo[2])/domain->zprd;
-            int ixnode = static_cast<int>(xscale*nxnodes);
-            int iynode = static_cast<int>(yscale*nynodes);
-            int iznode = static_cast<int>(zscale*nznodes);
-            while (ixnode > nxnodes-1) ixnode -= nxnodes;
-            while (iynode > nynodes-1) iynode -= nynodes;
-            while (iznode > nznodes-1) iznode -= nznodes;
-            while (ixnode < 0) ixnode += nxnodes;
-            while (iynode < 0) iynode += nynodes;
-            while (iznode < 0) iznode += nznodes;
-
-            tforce[i] = T_electron[ixnode][iynode][iznode];
-            if (tforce[i] < 0.0){
-               error->one(FLERR, "Fix ttm returned negative electron temperature");
-            }
-        }
-      }
-    }
-
+    t_target = input->variable->compute_equal(tvar);
+    if (t_target < 0.0)
+      error->one(FLERR,"Fix langevin variable returned negative temperature");
+    tsqrt = sqrt(t_target);
     modify->addstep_compute(update->ntimestep + 1);
-
+  } else if (tstyle == ATOM  && !ttmflag) {
+    modify->clearstep_compute();
+    if (atom->nmax > maxatom2) {
+      maxatom2 = atom->nmax;
+      memory->destroy(tforce);
+      memory->create(tforce,maxatom2,"langevin:tforce");
+    }
+    input->variable->compute_atom(tvar,igroup,tforce,1,0);
+    for (int i = 0; i < nlocal; i++)
+      if (mask[i] & groupbit)
+        if (tforce[i] < 0.0)
+          error->one(FLERR,
+                     "Fix langevin variable returned negative temperature");
+    modify->addstep_compute(update->ntimestep + 1);
   }
-
 }
 
 /* ----------------------------------------------------------------------
@@ -1298,24 +1121,21 @@ double FixLangevin::compute_scalar()
 void *FixLangevin::extract(const char *str, int &dim)
 {
   dim = 0;
-  if (strcmp(str,"t_target") == 0) {
-    return &t_target;
-  }
-  if (strcmp(str,"seed") == 0) {
-    dim = 1;
-    return &seed;
-  }
+
   if (strcmp(str,"flangevin") == 0) {
     dim = 2;
     return flangevin;
   }
-  if (strcmp(str,"biasflag") == 0) {
-    dim = 1;
-    return &tbiasflag;
-  }
   if (strcmp(str,"temperature") == 0) {
     dim = 1;
     return temperature;
+  }
+
+  // return pointer to address of tforce
+
+  if (strcmp(str,"ptr_tforce") == 0) {
+    dim = 1;
+    return &tforce;
   }
   return NULL;
 }
