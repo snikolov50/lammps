@@ -38,13 +38,17 @@ class FixTTM : public Fix {
   double memory_usage();
   double compute_vector(int);
   void post_force_setup(int);
+//   int modify_param(int, char **);
+//   virtual void *extract(const char *, int&);
   char lang_fix_name[100];
 
  protected:
   char *id_temp;
+  //  class Compute *temperature;
   class Compute *temperature_lang;
 
  private:
+//  char langName[100] = NULL;
   int lang_arg_index;
   int me;
   int Nlimit;
@@ -75,7 +79,7 @@ class FixTTM : public Fix {
   double electronic_thermal_conductivity;
   double gamma_p,gamma_s,v_0,v_0_sq;
   int check_temp_flag;
-  int maxatom;
+  int maxatom, maxatom1;
   void read_initial_electron_temperatures();
 };
 
