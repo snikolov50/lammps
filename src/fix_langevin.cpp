@@ -104,7 +104,11 @@ FixLangevin::FixLangevin(LAMMPS *lmp, int narg, char **arg) :
 
   int iarg = 7;
   while (iarg < narg) {
-    if (strcmp(arg[iarg],"angmom") == 0) {
+    if (strcmp(arg[iarg],"ttm") == 0) {
+      ttmflag = 1;
+      iarg += 1;
+    }
+    else if (strcmp(arg[iarg],"angmom") == 0) {
       if (iarg+2 > narg) error->all(FLERR,"Illegal fix langevin command");
       if (strcmp(arg[iarg+1],"no") == 0) ascale = 0.0;
       else ascale = force->numeric(FLERR,arg[iarg+1]);
@@ -158,8 +162,6 @@ FixLangevin::FixLangevin(LAMMPS *lmp, int narg, char **arg) :
 
   id_temp = NULL;
   temperature = NULL;
-  ttmflag = 1;
-
   energy = 0.0;
 
   // flangevin is unallocated until first call to setup()
@@ -172,6 +174,15 @@ FixLangevin::FixLangevin(LAMMPS *lmp, int narg, char **arg) :
   lv = NULL;
   tforce = NULL;
   maxatom1 = maxatom2 = 0;
+
+  if (ttmflag){ //need to initialize flangevin before setup() function. 
+     if (atom->nmax > maxatom1) {
+         memory->destroy(flangevin);
+         maxatom1 = atom->nmax;
+         memory->create(flangevin,maxatom1,3,"langevin:flangevin");
+     }
+     flangevin_allocated = 1;
+  }
 
   // setup atom-based array for franprev
   // register with Atom class
@@ -375,8 +386,11 @@ void FixLangevin::setup(int vflag)
         }
     }
   }
-  if (strstr(update->integrate_style,"verlet"))
-    post_force(vflag);
+  if (strstr(update->integrate_style,"verlet")){
+     if (ttmflag==0){ 
+         post_force(vflag);
+     }
+  }
   else {
     ((Respa *) update->integrate)->copy_flevel_f(nlevels_respa-1);
     post_force_respa(vflag,nlevels_respa-1,0);
@@ -421,6 +435,23 @@ void FixLangevin::setup(int vflag)
 
 /* ---------------------------------------------------------------------- */
 
+//void FixLangevin::post_force_setup(int /*vflag*/)
+//{
+//  int tmp;
+//  double **f = atom->f;
+//  int *mask = atom->mask;
+//  int nlocal = atom->nlocal;
+//  double ***ptr_flangevin = (double ***) modify->fix[id_lang]->extract("flangevin",tmp);
+//  for (int i = 0; i < nlocal; i++) {
+//    if (mask[i] & groupbit) {
+//      f[i][0] += flangevin[i][0];
+//      f[i][1] += flangevin[i][1];
+//      f[i][2] += flangevin[i][2];
+//    }
+//  }
+//}
+
+/*----------------------------------------------------------------------- */
 void FixLangevin::initial_integrate(int /* vflag */)
 {
   double **v = atom->v;
@@ -630,9 +661,9 @@ void FixLangevin::post_force_templated()
   double dt = update->dt;
   double mvv2e = force->mvv2e;
   double ftm2v = force->ftm2v;
-
-  compute_target();
-
+  if (ttmflag==0){ //if you don't add this check then you will need to provide dummy variable for compute_atom to evaulate (see line 852 in compute_target: input->variable->compute_atom(tvar,igroup,tforce,1,0);)
+     compute_target();
+  }
   if (Tp_ZERO) {
     fsum[0] = fsum[1] = fsum[2] = 0.0;
     count = group->count(igroup);
@@ -1113,11 +1144,19 @@ void *FixLangevin::extract(const char *str, int &dim)
   }
   if (strcmp(str,"flangevin") == 0) {
     dim = 2;
-    return flangevin;
+    return &flangevin;
   }
   if (strcmp(str,"temperature") == 0) {
     dim = 1;
     return temperature;
+  }
+  if (strcmp(str,"gfactor1") == 0) {
+    dim = 1;
+    return &gfactor1;
+  }
+  if (strcmp(str,"gfactor2") == 0) {
+    dim = 1;
+    return &gfactor2;
   }
   
   // return pointer to address of tforce
