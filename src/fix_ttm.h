@@ -37,6 +37,7 @@ class FixTTM : public Fix {
   void restart(char *);
   double memory_usage();
   double compute_vector(int);
+  void post_force_setup(int);
 //   int modify_param(int, char **);
 //   virtual void *extract(const char *, int&);
   char lang_fix_name[100];
@@ -61,7 +62,7 @@ class FixTTM : public Fix {
   FILE *fp,*fpr;
   int ***nsum;
   int ***nsum_all,***T_initial_set;
-  double *gfactor1,*gfactor2,*ratio;
+  double *gfactor1,*gfactor2;
   double **flangevin;
   double ***T_electron;
   int nxnodes,nynodes,nznodes,total_nnodes;
