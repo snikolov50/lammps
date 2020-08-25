@@ -82,7 +82,7 @@ fix      	flang all langevin 0.0 0.0 1.88735 1041 ttm
 
 # test of adding more atoms
 
-lattice         fcc ${lattice_const} origin 0.1 0.1 0.1 # offset to avoid original atoms
+lattice         fcc ${lattice_const} origin 0.25 0.25 0.25 # offset to create diamond structure
 create_atoms 1 region atom_box
 
 # output        
@@ -97,9 +97,9 @@ fix             4 all ave/chunk 1 ${dump_freq} ${dump_freq} temp_chunk v_temp fi
 
 # run    
 timestep        0.001
-thermo_style 	custom time step temp lx ly lz press pxx pyy pzz etotal epair enthalpy vol density f_melt[1] f_melt[2] # f_flang
+thermo_style 	custom time step temp lx ly lz press pxx pyy pzz etotal epair enthalpy vol density # f_melt[1] f_melt[2] # f_flang
 thermo          10
-run             100
+run             10
 #velocity        all set 5 NULL NULL sum yes units box
 #run 5000
 
