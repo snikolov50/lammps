@@ -2041,6 +2041,50 @@ void Domain::x2lamda(double *x, double *lamda)
 }
 
 /* ----------------------------------------------------------------------
+   convert box coords to 0-1 lamda coords for one atom
+   lamda = H^-1 (x - x0)
+   x and lamda can point to same 3-vector
+   stricly enforce 0 <= lamda < 1 for periodic dimensions
+------------------------------------------------------------------------- */
+
+void Domain::x2lamda_remap(double *x, double *lamda)
+{
+  double delta[3];
+  delta[0] = x[0] - boxlo[0];
+  delta[1] = x[1] - boxlo[1];
+  delta[2] = x[2] - boxlo[2];
+
+  if (triclinic == 0) {
+    lamda[0] = h_inv[0]*delta[0];
+    lamda[1] = h_inv[1]*delta[1];
+    lamda[2] = h_inv[2]*delta[2];
+  } else {
+    lamda[0] = h_inv[0]*delta[0] + h_inv[5]*delta[1] + h_inv[4]*delta[2];
+    lamda[1] = h_inv[1]*delta[1] + h_inv[3]*delta[2];
+    lamda[2] = h_inv[2]*delta[2];
+  }
+
+
+  if (xperiodic) {
+    while (coord[0] < 0.0) coord[0] += 1.0;
+    while (coord[0] >= 1.0) coord[0] -= 1.0;
+    coord[0] = MAX(coord[0],0.0);
+  }
+
+  if (yperiodic) {
+    while (coord[1] < 0.0) coord[1] += 1.0;
+    while (coord[1] >= 1.0) coord[1] -= 1.0;
+    coord[1] = MAX(coord[1],0.0);
+  }
+
+  if (zperiodic) {
+    while (coord[2] < 0.0) coord[2] += 1.0;
+    while (coord[2] >= 1.0) coord[2] -= 1.0;
+    coord[2] = MAX(coord[2],0.0);
+  }
+}
+
+/* ----------------------------------------------------------------------
    convert box coords to triclinic 0-1 lamda coords for one atom
    use my_boxlo & my_h_inv stored by caller for previous state of box
    lamda = H^-1 (x - x0)
