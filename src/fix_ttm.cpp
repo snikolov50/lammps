@@ -541,10 +541,20 @@ void FixTTM::end_of_step()
 
     // compute new electron T profile
 
-    for (int ixnode = 0; ixnode < nxnodes; ixnode++) {
-      for (int iynode = 0; iynode < nynodes; iynode++) {
+    double Tc, Txr, Txl, Tyr, Tyl, Tzr, Tzl;
+
+    for (int ixnode = 0; ixnode < nxnodes; ixnode++) 
+      for (int iynode = 0; iynode < nynodes; iynode++) 
         for (int iznode = 0; iznode < nznodes; iznode++) {
-          int right_xnode = ixnode + 1;
+          //          int right_xnode = ixnode + 1;
+          // APT:  Initial stab at pbc/nonbpbc boundaries
+          Tc = T_electron_old[ixnode][iynode][iznode];
+          if (ixnode < nxnodes-1) Txr = T_electron_old[ixnode+1][iynode][iznode];
+          else {
+            if (pbcflag[0]) Txr = T_electron_old[0][iynode][iznode];
+            else Txr = 0.0;
+          }
+
           int right_ynode = iynode + 1;
           int right_znode = iznode + 1;
           if (right_xnode == nxnodes) right_xnode = 0;
@@ -557,49 +567,31 @@ void FixTTM::end_of_step()
           if (left_ynode == -1) left_ynode = nynodes - 1;
           if (left_znode == -1) left_znode = nznodes - 1;
 
-          if (convflag == 1){
-             T_electron[ixnode][iynode][iznode] =
-             T_electron_old[ixnode][iynode][iznode] +
-             inner_dt/(electronic_specific_heat*electronic_density) *
-             (electronic_thermal_conductivity *
+          T_electron[ixnode][iynode][iznode] =
+            Tc +
+            inner_dt/(electronic_specific_heat*electronic_density) *
+            (electronic_thermal_conductivity *
              ((T_electron_old[right_xnode][iynode][iznode] +
-             T_electron_old[left_xnode][iynode][iznode] -
-             2*T_electron_old[ixnode][iynode][iznode])/dx/dx +
-             (T_electron_old[ixnode][right_ynode][iznode] +
-             T_electron_old[ixnode][left_ynode][iznode] -
-             2*T_electron_old[ixnode][iynode][iznode])/dy/dy +
-             (T_electron_old[ixnode][iynode][right_znode] +
-             T_electron_old[ixnode][iynode][left_znode] -
-             2*T_electron_old[ixnode][iynode][iznode])/dz/dz) -
-             (net_energy_transfer_all[ixnode][iynode][iznode])/del_vol) -
-             u_node_all[ixnode][iynode][iznode]*T_electron_old[right_xnode][iynode][iznode]*(0.5*(inner_dt/dx)/nvel_all[ixnode][iynode][iznode]) +
-             u_node_all[ixnode][iynode][iznode]*T_electron_old[left_xnode][iynode][iznode]*(0.5*(inner_dt/dx)/nvel_all[ixnode][iynode][iznode]) -
-             v_node_all[ixnode][iynode][iznode]*T_electron_old[ixnode][right_ynode][iznode]*(0.5*(inner_dt/dy)/nvel_all[ixnode][iynode][iznode]) +
-             v_node_all[ixnode][iynode][iznode]*T_electron_old[ixnode][left_ynode][iznode]*(0.5*(inner_dt/dy)/nvel_all[ixnode][iynode][iznode]) -
-             w_node_all[ixnode][iynode][iznode]*T_electron_old[ixnode][iynode][right_znode]*(0.5*(inner_dt/dz)/nvel_all[ixnode][iynode][iznode]) +
-             w_node_all[ixnode][iynode][iznode]*T_electron_old[ixnode][iynode][left_znode]*(0.5*(inner_dt/dz)/nvel_all[ixnode][iynode][iznode]);
-          } 
-
-          else if (convflag == 0){
-             T_electron[ixnode][iynode][iznode] =
-             T_electron_old[ixnode][iynode][iznode] +
-             inner_dt/(electronic_specific_heat*electronic_density) *
-             (electronic_thermal_conductivity *
-             ((T_electron_old[right_xnode][iynode][iznode] +
-             T_electron_old[left_xnode][iynode][iznode] -
-             2*T_electron_old[ixnode][iynode][iznode])/dx/dx +
-             (T_electron_old[ixnode][right_ynode][iznode] +
-             T_electron_old[ixnode][left_ynode][iznode] -
-             2*T_electron_old[ixnode][iynode][iznode])/dy/dy +
-             (T_electron_old[ixnode][iynode][right_znode] +
-             T_electron_old[ixnode][iynode][left_znode] -
-             2*T_electron_old[ixnode][iynode][iznode])/dz/dz) -
+               T_electron_old[left_xnode][iynode][iznode] -
+               2*T_electron_old[ixnode][iynode][iznode])/dx/dx +
+              (T_electron_old[ixnode][right_ynode][iznode] +
+               T_electron_old[ixnode][left_ynode][iznode] -
+               2*T_electron_old[ixnode][iynode][iznode])/dy/dy +
+              (T_electron_old[ixnode][iynode][right_znode] +
+               T_electron_old[ixnode][iynode][left_znode] -
+               2*T_electron_old[ixnode][iynode][iznode])/dz/dz) -
              (net_energy_transfer_all[ixnode][iynode][iznode])/del_vol);
-          }
- 
+          if (convflag == 1) {
+            T_electron[ixnode][iynode][iznode] -=
+              u_node_all[ixnode][iynode][iznode]*T_electron_old[right_xnode][iynode][iznode]*(0.5*(inner_dt/dx)/nvel_all[ixnode][iynode][iznode]) +
+              u_node_all[ixnode][iynode][iznode]*T_electron_old[left_xnode][iynode][iznode]*(0.5*(inner_dt/dx)/nvel_all[ixnode][iynode][iznode]) -
+              v_node_all[ixnode][iynode][iznode]*T_electron_old[ixnode][right_ynode][iznode]*(0.5*(inner_dt/dy)/nvel_all[ixnode][iynode][iznode]) +
+              v_node_all[ixnode][iynode][iznode]*T_electron_old[ixnode][left_ynode][iznode]*(0.5*(inner_dt/dy)/nvel_all[ixnode][iynode][iznode]) -
+              w_node_all[ixnode][iynode][iznode]*T_electron_old[ixnode][iynode][right_znode]*(0.5*(inner_dt/dz)/nvel_all[ixnode][iynode][iznode]) +
+              w_node_all[ixnode][iynode][iznode]*T_electron_old[ixnode][iynode][left_znode]*(0.5*(inner_dt/dz)/nvel_all[ixnode][iynode][iznode]);
+          } 
+          
         }
-      }
-    }
 
   }
 
