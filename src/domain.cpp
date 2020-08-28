@@ -2044,7 +2044,7 @@ void Domain::x2lamda(double *x, double *lamda)
    convert box coords to 0-1 lamda coords for one atom
    lamda = H^-1 (x - x0)
    x and lamda can point to same 3-vector
-   stricly enforce 0 <= lamda < 1 for periodic dimensions
+   strictly enforce 0 <= lamda < 1 for periodic dimensions
 ------------------------------------------------------------------------- */
 
 void Domain::x2lamda_remap(double *x, double *lamda)
@@ -2063,7 +2063,6 @@ void Domain::x2lamda_remap(double *x, double *lamda)
     lamda[1] = h_inv[1]*delta[1] + h_inv[3]*delta[2];
     lamda[2] = h_inv[2]*delta[2];
   }
-
 
   if (xperiodic) {
     while (coord[0] < 0.0) coord[0] += 1.0;

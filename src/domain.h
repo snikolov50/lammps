@@ -134,6 +134,7 @@ class Domain : protected Pointers {
   void print_box(const std::string &);
   void boundary_string(char *);
 
+  virtual void x2lamda_remap(double *, double *);
   virtual void lamda2x(int);
   virtual void x2lamda(int);
   virtual void lamda2x(double *, double *);
