@@ -261,8 +261,8 @@ void FixTTM::init()
 
   if (domain->dimension == 2)
     error->all(FLERR,"Cannot use fix ttm with 2d simulation");
-  if (domain->nonperiodic != 0)
-    error->all(FLERR,"Cannot use non-periodic boundaries with fix ttm");
+//  if (domain->nonperiodic != 0)
+//    error->all(FLERR,"Cannot use non-periodic boundaries with fix ttm");
   if (domain->triclinic)
     error->all(FLERR,"Cannot use fix ttm with triclinic box");
 
@@ -462,7 +462,7 @@ void FixTTM::end_of_step()
       int ixnode = static_cast<int>(lamda[0]*nxnodes);
       int iynode = static_cast<int>(lamda[1]*nynodes);
       int iznode = static_cast<int>(lamda[2]*nznodes);
-      std::cout << "\n" <<  ixnode << iynode << iznode;  
+//      std::cout << "\n" <<  ixnode << iynode << iznode;  
       if (temperature_lang && temperature_lang->tempbias){
          temperature_lang->remove_bias(i,v[i]);
       }
