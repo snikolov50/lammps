@@ -63,6 +63,7 @@ class FixTTM : public Fix {
   int ***nsum;
   int ***nsum_all,***T_initial_set;
   double *gfactor1,*gfactor2;
+  double lamda[3];
   double **flangevin;
   double ***T_electron;
   int nxnodes,nynodes,nznodes,total_nnodes;

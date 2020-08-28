@@ -2065,21 +2065,21 @@ void Domain::x2lamda_remap(double *x, double *lamda)
   }
 
   if (xperiodic) {
-    while (coord[0] < 0.0) coord[0] += 1.0;
-    while (coord[0] >= 1.0) coord[0] -= 1.0;
-    coord[0] = MAX(coord[0],0.0);
+    while (lamda[0] < 0.0) lamda[0] += 1.0;
+    while (lamda[0] >= 1.0) lamda[0] -= 1.0;
+    lamda[0] = MAX(lamda[0],0.0);
   }
 
   if (yperiodic) {
-    while (coord[1] < 0.0) coord[1] += 1.0;
-    while (coord[1] >= 1.0) coord[1] -= 1.0;
-    coord[1] = MAX(coord[1],0.0);
+    while (lamda[1] < 0.0) lamda[1] += 1.0;
+    while (lamda[1] >= 1.0) lamda[1] -= 1.0;
+    lamda[1] = MAX(lamda[1],0.0);
   }
 
   if (zperiodic) {
-    while (coord[2] < 0.0) coord[2] += 1.0;
-    while (coord[2] >= 1.0) coord[2] -= 1.0;
-    coord[2] = MAX(coord[2],0.0);
+    while (lamda[2] < 0.0) lamda[2] += 1.0;
+    while (lamda[2] >= 1.0) lamda[2] -= 1.0;
+    lamda[2] = MAX(lamda[2],0.0);
   }
 }
 

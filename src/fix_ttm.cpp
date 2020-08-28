@@ -414,26 +414,6 @@ void FixTTM::pre_force(int /* vflag */)
 void FixTTM::end_of_step()
 {
 
-//   if (temperature && temperature->tempbias && check_temp_flag == 0) {
-//     int tmp;
-//     temperature_lang = (LAMMPS_NS::Compute *) modify->fix[id_lang]->extract("temperature",tmp);
-//     if (temperature_lang != 0) {
-//       if (temperature_lang->id != temperature->id)
-//         error->universe_all(FLERR,"two temperature computes given for removing velocity bias");
-//     }
-//     temperature->compute_scalar();
-//     check_temp_flag = 1;
-//   } else if (check_temp_flag == 0) { 
-//     int tmp;
-//     langbias = (int *) modify->fix[id_lang]->extract("biasflag",tmp);
-//     if (temperature == 0 && langbias[0] == 1) {
-//       int tmp;
-//       temperature = (LAMMPS_NS::Compute *) modify->fix[id_lang]->extract("temperature",tmp);     
-//       temperature->compute_scalar();
-//     }
-//     check_temp_flag = 1;
-//   }
-  
   int tmp;
   temperature_lang = (LAMMPS_NS::Compute *) modify->fix[id_lang]->extract("temperature",tmp);     
   if (temperature_lang && temperature_lang->tempbias){ //checking if temperature_lang is NULL (possible if no fix_modify is given)
@@ -465,23 +445,24 @@ void FixTTM::end_of_step()
 
   for (int i = 0; i < nlocal; i++){
     if (mask[i] & groupbit) {
-      double xscale = (x[i][0] - domain->boxlo[0])/domain->xprd;
-      double yscale = (x[i][1] - domain->boxlo[1])/domain->yprd;
-      double zscale = (x[i][2] - domain->boxlo[2])/domain->zprd;
-      int ixnode = static_cast<int>(xscale*nxnodes);
-      int iynode = static_cast<int>(yscale*nynodes);
-      int iznode = static_cast<int>(zscale*nznodes);
-      while (ixnode > nxnodes-1) ixnode -= nxnodes;
-      while (iynode > nynodes-1) iynode -= nynodes;
-      while (iznode > nznodes-1) iznode -= nznodes;
-      while (ixnode < 0) ixnode += nxnodes;
-      while (iynode < 0) iynode += nynodes;
-      while (iznode < 0) iznode += nznodes;
+//      double xscale = (x[i][0] - domain->boxlo[0])/domain->xprd;
+//      double yscale = (x[i][1] - domain->boxlo[1])/domain->yprd;
+//      double zscale = (x[i][2] - domain->boxlo[2])/domain->zprd;
+//      int ixnode = static_cast<int>(xscale*nxnodes);
+//      int iynode = static_cast<int>(yscale*nynodes);
+//      int iznode = static_cast<int>(zscale*nznodes);
+//      while (ixnode > nxnodes-1) ixnode -= nxnodes;
+//      while (iynode > nynodes-1) iynode -= nynodes;
+//      while (iznode > nznodes-1) iznode -= nznodes;
+//      while (ixnode < 0) ixnode += nxnodes;
+//      while (iynode < 0) iynode += nynodes;
+//      while (iznode < 0) iznode += nznodes;
 
-//       if (temperature && temperature->tempbias){
-//          temperature->remove_bias(i,v[i]);
-//       }
-
+      domain->x2lamda_remap(x[i], lamda);
+      int ixnode = static_cast<int>(lamda[0]*nxnodes);
+      int iynode = static_cast<int>(lamda[1]*nynodes);
+      int iznode = static_cast<int>(lamda[2]*nznodes);
+      std::cout << "\n" <<  ixnode << iynode << iznode;  
       if (temperature_lang && temperature_lang->tempbias){
          temperature_lang->remove_bias(i,v[i]);
       }
@@ -541,7 +522,7 @@ void FixTTM::end_of_step()
 
     // compute new electron T profile
 
-    double Tc, Txr, Txl, Tyr, Tyl, Tzr, Tzl;
+    double Tc, Txr, Txl, Tyr, Tyl, Tzr, Tzl, u_vel, v_vel, w_vel, npar;;
 
     for (int ixnode = 0; ixnode < nxnodes; ixnode++) 
       for (int iynode = 0; iynode < nynodes; iynode++) 
@@ -549,46 +530,61 @@ void FixTTM::end_of_step()
           //          int right_xnode = ixnode + 1;
           // APT:  Initial stab at pbc/nonbpbc boundaries
           Tc = T_electron_old[ixnode][iynode][iznode];
+          u_vel = u_node_all[ixnode][iynode][iznode];
+          v_vel = v_node_all[ixnode][iynode][iznode];
+          w_vel = w_node_all[ixnode][iynode][iznode];
+          npar  = nvel_all[ixnode][iynode][iznode];
+
           if (ixnode < nxnodes-1) Txr = T_electron_old[ixnode+1][iynode][iznode];
           else {
-            if (pbcflag[0]) Txr = T_electron_old[0][iynode][iznode];
+            if (domain->periodicity[0]) Txr = T_electron_old[0][iynode][iznode];
             else Txr = 0.0;
           }
 
-          int right_ynode = iynode + 1;
-          int right_znode = iznode + 1;
-          if (right_xnode == nxnodes) right_xnode = 0;
-          if (right_ynode == nynodes) right_ynode = 0;
-          if (right_znode == nznodes) right_znode = 0;
-          int left_xnode = ixnode - 1;
-          int left_ynode = iynode - 1;
-          int left_znode = iznode - 1;
-          if (left_xnode == -1) left_xnode = nxnodes - 1;
-          if (left_ynode == -1) left_ynode = nynodes - 1;
-          if (left_znode == -1) left_znode = nznodes - 1;
+          if (iynode < nynodes-1) Tyr = T_electron_old[ixnode][iynode+1][iznode];
+          else {
+            if (domain->periodicity[1]) Tyr = T_electron_old[ixnode][0][iznode];
+            else Tyr = 0.0; 
+          } 
+
+          if (iznode < nznodes-1) Tzr = T_electron_old[ixnode][iynode][iznode+1];
+          else {
+            if (domain->periodicity[2]) Tzr = T_electron_old[ixnode][iynode][0];
+            else Tzr = 0.0;
+          }
+
+          if (ixnode > 0) Txl = T_electron_old[ixnode-1][iynode][iznode];
+          else {
+            if (domain->periodicity[0]) Txl = T_electron_old[0][iynode][iznode];
+            else Txl = 0.0; 
+          } 
+
+          if (iynode > 0) Tyl = T_electron_old[ixnode][iynode-1][iznode];
+          else {
+            if (domain->periodicity[1]) Tyl = T_electron_old[ixnode][0][iznode];
+            else Tyl = 0.0;
+          }
+
+          if (iznode > 0) Tzl = T_electron_old[ixnode][iynode][iznode-1];
+          else {
+            if (domain->periodicity[2]) Tzl = T_electron_old[ixnode][iynode][0];
+            else Tzl = 0.0;
+          }
 
           T_electron[ixnode][iynode][iznode] =
             Tc +
             inner_dt/(electronic_specific_heat*electronic_density) *
             (electronic_thermal_conductivity *
-             ((T_electron_old[right_xnode][iynode][iznode] +
-               T_electron_old[left_xnode][iynode][iznode] -
-               2*T_electron_old[ixnode][iynode][iznode])/dx/dx +
-              (T_electron_old[ixnode][right_ynode][iznode] +
-               T_electron_old[ixnode][left_ynode][iznode] -
-               2*T_electron_old[ixnode][iynode][iznode])/dy/dy +
-              (T_electron_old[ixnode][iynode][right_znode] +
-               T_electron_old[ixnode][iynode][left_znode] -
-               2*T_electron_old[ixnode][iynode][iznode])/dz/dz) -
+             ((Txr + Txl - 2*Tc)/dx/dx +
+              (Tyr + Tyl - 2*Tc)/dy/dy +
+              (Tzr + Tzl - 2*Tc)/dz/dz) -
              (net_energy_transfer_all[ixnode][iynode][iznode])/del_vol);
+
           if (convflag == 1) {
             T_electron[ixnode][iynode][iznode] -=
-              u_node_all[ixnode][iynode][iznode]*T_electron_old[right_xnode][iynode][iznode]*(0.5*(inner_dt/dx)/nvel_all[ixnode][iynode][iznode]) +
-              u_node_all[ixnode][iynode][iznode]*T_electron_old[left_xnode][iynode][iznode]*(0.5*(inner_dt/dx)/nvel_all[ixnode][iynode][iznode]) -
-              v_node_all[ixnode][iynode][iznode]*T_electron_old[ixnode][right_ynode][iznode]*(0.5*(inner_dt/dy)/nvel_all[ixnode][iynode][iznode]) +
-              v_node_all[ixnode][iynode][iznode]*T_electron_old[ixnode][left_ynode][iznode]*(0.5*(inner_dt/dy)/nvel_all[ixnode][iynode][iznode]) -
-              w_node_all[ixnode][iynode][iznode]*T_electron_old[ixnode][iynode][right_znode]*(0.5*(inner_dt/dz)/nvel_all[ixnode][iynode][iznode]) +
-              w_node_all[ixnode][iynode][iznode]*T_electron_old[ixnode][iynode][left_znode]*(0.5*(inner_dt/dz)/nvel_all[ixnode][iynode][iznode]);
+              u_vel*Txr*(0.5*(inner_dt/dx)/npar) + u_vel*Txl*(0.5*(inner_dt/dx)/npar) -
+              v_vel*Tyr*(0.5*(inner_dt/dy)/npar) + v_vel*Tyl*(0.5*(inner_dt/dy)/npar) -
+              w_vel*Tzr*(0.5*(inner_dt/dz)/npar) + w_vel*Tzl*(0.5*(inner_dt/dz)/npar);
           } 
           
         }
