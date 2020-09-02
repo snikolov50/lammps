@@ -23,7 +23,7 @@ variable zmin equal -12.5
 #----------------------------------------------
 ##########################################
 units           metal
-atom_style      full
+atom_style      atomic
 
 boundary        p p p
 
@@ -91,7 +91,7 @@ compute         pe all pe/atom
 compute         ke all ke/atom
 variable        temp atom c_ke/1.5/v_boltz
 
-dump            1z1 all custom ${dump_freq} ${filename}.dumpovito id type mol x y z c_ke c_pe 
+dump            1z1 all custom ${dump_freq} ${filename}.dumpovito id type x y z c_ke c_pe 
 
 compute         temp_chunk all chunk/atom bin/1d x lower 1.0
 fix             4 all ave/chunk 1 ${dump_freq} ${dump_freq} temp_chunk v_temp file ${filename}.tmpProfile

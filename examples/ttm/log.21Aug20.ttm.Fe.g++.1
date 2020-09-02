@@ -25,7 +25,7 @@ variable zmin equal -12.5
 #----------------------------------------------
 ##########################################
 units           metal
-atom_style      full
+atom_style      atomic
 
 boundary        p p p
 
@@ -53,7 +53,7 @@ region atom_box block -25 25 -12.5 12.5 -12.5 ${zmax}
 region atom_box block -25 25 -12.5 12.5 -12.5 12.5
 create_atoms 1 region atom_box
 Created 125000 atoms
-  create_atoms CPU = 0.027 seconds
+  create_atoms CPU = 0.022 seconds
 
 mass	        1 55.845
 variable        mid_val        equal    xhi/2.0
@@ -103,12 +103,13 @@ fix             1 all nve
 #fix             qout rhs_group heat 1 -${heatflux}
 
 ###########################################################################
-compute 	mytemp all temp/com
-fix             melt all ttm 1.2470e-5 0.087614 0.00536462 29.5917 47.5679 58.4613 28 14 14 temp_1800_nx_28_ny_14_nz_14 ${dump_freq} ${filename}.Te lang flang conv yes 50 e_stop no
-fix             melt all ttm 1.2470e-5 0.087614 0.00536462 29.5917 47.5679 58.4613 28 14 14 temp_1800_nx_28_ny_14_nz_14 100 ${filename}.Te lang flang conv yes 50 e_stop no
-fix             melt all ttm 1.2470e-5 0.087614 0.00536462 29.5917 47.5679 58.4613 28 14 14 temp_1800_nx_28_ny_14_nz_14 100 block_28_14_14.Te lang flang conv yes 50 e_stop no
-fix      	flang all langevin 0.0 0.0 1.88735 1041
-fix_modify      flang temp mytemp
+#compute 	mytemp all temp/com
+fix             melt all ttm 1.2470e-5 0.087614 0.00536462 29.5917 47.5679 58.4613 28 14 14 temp_1800_nx_28_ny_14_nz_14 ${dump_freq} ${filename}.Te lang flang conv no 50
+fix             melt all ttm 1.2470e-5 0.087614 0.00536462 29.5917 47.5679 58.4613 28 14 14 temp_1800_nx_28_ny_14_nz_14 100 ${filename}.Te lang flang conv no 50
+fix             melt all ttm 1.2470e-5 0.087614 0.00536462 29.5917 47.5679 58.4613 28 14 14 temp_1800_nx_28_ny_14_nz_14 100 block_28_14_14.Te lang flang conv no 50
+fix      	flang all langevin 0.0 0.0 1.88735 1041 ttm
+fix_modify	flang energy yes
+#fix_modify      flang temp mytemp
 ###########################################################################
 
 # output
@@ -116,9 +117,9 @@ compute         pe all pe/atom
 compute         ke all ke/atom
 variable        temp atom c_ke/1.5/v_boltz
 
-dump            1z1 all custom ${dump_freq} ${filename}.dumpovito id type mol x y z c_ke c_pe
-dump            1z1 all custom 100 ${filename}.dumpovito id type mol x y z c_ke c_pe
-dump            1z1 all custom 100 block_28_14_14.dumpovito id type mol x y z c_ke c_pe
+dump            1z1 all custom ${dump_freq} ${filename}.dumpovito id type x y z c_ke c_pe
+dump            1z1 all custom 100 ${filename}.dumpovito id type x y z c_ke c_pe
+dump            1z1 all custom 100 block_28_14_14.dumpovito id type x y z c_ke c_pe
 
 compute         temp_chunk all chunk/atom bin/1d x lower 1.0
 fix             4 all ave/chunk 1 ${dump_freq} ${dump_freq} temp_chunk v_temp file ${filename}.tmpProfile
@@ -128,7 +129,7 @@ fix             4 all ave/chunk 1 100 100 temp_chunk v_temp file block_28_14_14.
 
 # run
 timestep        0.001
-thermo_style 	custom time step temp lx ly lz press pxx pyy pzz etotal epair enthalpy vol density f_melt[1] f_melt[2] # f_flang
+thermo_style 	custom time step temp lx ly lz press pxx pyy pzz etotal epair enthalpy vol density f_melt[1] f_melt[2] f_flang
 thermo          10
 run             100
 Neighbor list info ...
@@ -140,37 +141,36 @@ Neighbor list info ...
   1 neighbor lists, perpetual/occasional/extra = 1 0 0
   (1) pair eam/fs, perpetual
       attributes: half, newton on
-      pair build: half/bin/newton
+      pair build: half/bin/atomonly/newton
       stencil: half/bin/3d/newton
       bin: standard
-Per MPI rank memory allocation (min/avg/max) = 118.3 | 118.3 | 118.3 Mbytes
-Time Step Temp Lx Ly Lz Press Pxx Pyy Pzz TotEng E_pair Enthalpy Volume Density f_melt[1] f_melt[2] 
-           0        0            0      178.886       89.443       89.443    27436.839    27436.839    27436.839    27436.839   -532207.31   -532207.31   -507700.16      1431097    8.1005253    2814.3722            0 
-        0.01       10    16.004739      178.886       89.443       89.443    27696.024    27696.274    27695.993    27695.805   -531936.62   -532195.22   -507197.96      1431097    8.1005253     2522.877    27.680118 
-        0.02       20    27.324382      178.886       89.443       89.443    28248.876    28249.176    28249.314    28248.138   -531676.22   -532117.71   -506443.74      1431097    8.1005253    2264.6901    24.716863 
-        0.03       30    32.128441      178.886       89.443       89.443     29157.32    29156.312    29156.162    29159.486   -531443.96   -531963.07   -505400.04      1431097    8.1005253    2034.6657    21.723857 
-        0.04       40    33.704645      178.886       89.443       89.443    30247.535    30243.061    30246.848    30252.697   -531233.87   -531778.45   -504216.15      1431097    8.1005253    1826.2159    19.757913 
-        0.05       50    35.584436      178.886       89.443       89.443    31270.204    31264.054    31267.871    31278.688   -531047.34   -531622.29   -503116.15      1431097    8.1005253    1641.3007     17.63375 
-        0.06       60    39.326432      178.886       89.443       89.443    32106.043    32098.561    32101.793    32117.774   -530880.74   -531516.15   -502202.96      1431097    8.1005253     1476.055    15.865095 
-        0.07       70    43.693021      178.886       89.443       89.443    32803.433     32792.77    32801.704    32815.825   -530731.68   -531437.64   -501430.97      1431097    8.1005253    1328.4804    13.720468 
-        0.08       80     46.92583      178.886       89.443       89.443    33440.511    33433.368     33440.24    33447.926   -530601.18   -531359.38   -500731.43      1431097    8.1005253    1199.1366    12.216747 
-        0.09       90    49.371418      178.886       89.443       89.443    34022.125    34016.883    34024.118    34025.374   -530482.13   -531279.85   -500092.87      1431097    8.1005253     1081.065    10.972745 
-         0.1      100     52.22262      178.886       89.443       89.443    34473.058    34470.909    34474.309    34473.955   -530376.42    -531220.2   -499584.38      1431097    8.1005253    976.56854    9.1611548 
-Loop time of 14.7846 on 1 procs for 100 steps with 125000 atoms
+Per MPI rank memory allocation (min/avg/max) = 83.37 | 83.37 | 83.37 Mbytes
+Time Step Temp Lx Ly Lz Press Pxx Pyy Pzz TotEng E_pair Enthalpy Volume Density f_melt[1] f_melt[2] f_flang 
+           0        0            0      178.886       89.443       89.443    27436.839    27436.839    27436.839    27436.839   -532207.31   -532207.31   -507700.16      1431097    8.1005253    2814.3722            0           -0 
+        0.01       10     16.04401      178.886       89.443       89.443    27696.562     27697.03    27697.066    27695.589   -532214.28   -532195.21   -507475.14      1431097    8.1005253     2522.407    27.330872   -278.29977 
+        0.02       20    27.357188      178.886       89.443       89.443    28250.411    28250.676    28251.517    28249.041   -532213.53    -532117.5   -506979.68      1431097    8.1005253    2263.8336    24.966827   -538.05521 
+        0.03       30    32.145038      178.886       89.443       89.443    29160.624    29159.272    29160.183    29162.418    -532212.8    -531962.5   -506165.93      1431097    8.1005253    2033.5286    22.338619    -769.6743 
+        0.04       40    33.697877      178.886       89.443       89.443    30251.459    30246.125    30251.256    30256.997   -532212.16   -531777.76   -505190.94      1431097    8.1005253    1825.4445    20.105335   -978.87501 
+        0.05       50     35.59138      178.886       89.443       89.443    31274.856    31267.987    31272.665    31283.916   -532211.59   -531621.52   -504276.25      1431097    8.1005253    1640.6004    17.265699    -1165.139 
+        0.06       60    39.324075      178.886       89.443       89.443    32110.321    32101.663    32105.374    32123.926   -532211.12   -531515.44   -503529.53      1431097    8.1005253    1475.4665    15.692013   -1331.0597 
+        0.07       70    43.716397      178.886       89.443       89.443    32806.846    32794.864    32803.745    32821.928    -532210.7   -531437.15   -502906.95      1431097    8.1005253    1327.3586    14.230406   -1479.8984 
+        0.08       80    46.975224      178.886       89.443       89.443    33443.935    33435.237    33442.368    33454.199   -532210.33   -531358.94   -502337.52      1431097    8.1005253    1197.8944    12.189534    -1610.383 
+        0.09       90      49.3898      178.886       89.443       89.443    34024.588    34016.811    34025.532     34031.42   -532209.96    -531279.5    -501818.5      1431097    8.1005253    1080.0483    11.698327   -1728.4748 
+         0.1      100      52.2802      178.886       89.443       89.443     34475.38    34468.791    34476.521    34480.827   -532209.64   -531219.88   -501415.52      1431097    8.1005253    974.98406    9.8333287   -1834.4715 
+Loop time of 25.3216 on 1 procs for 100 steps with 125000 atoms
 
-Performance: 0.584 ns/day, 41.068 hours/ns, 6.764 timesteps/s
-98.9% CPU use with 1 MPI tasks x no OpenMP threads
+Performance: 0.341 ns/day, 70.338 hours/ns, 3.949 timesteps/s
+99.3% CPU use with 1 MPI tasks x no OpenMP threads
 
 MPI task timing breakdown:
 Section |  min time  |  avg time  |  max time  |%varavg| %total
 ---------------------------------------------------------------
-Pair    | 13.022     | 13.022     | 13.022     |   0.0 | 88.08
-Bond    | 4.5e-05    | 4.5e-05    | 4.5e-05    |   0.0 |  0.00
+Pair    | 23.09      | 23.09      | 23.09      |   0.0 | 91.19
 Neigh   | 0          | 0          | 0          |   0.0 |  0.00
-Comm    | 0.055632   | 0.055632   | 0.055632   |   0.0 |  0.38
-Output  | 0.18808    | 0.18808    | 0.18808    |   0.0 |  1.27
-Modify  | 1.4943     | 1.4943     | 1.4943     |   0.0 | 10.11
-Other   |            | 0.02436    |            |       |  0.16
+Comm    | 0.070211   | 0.070211   | 0.070211   |   0.0 |  0.28
+Output  | 0.29416    | 0.29416    | 0.29416    |   0.0 |  1.16
+Modify  | 1.8299     | 1.8299     | 1.8299     |   0.0 |  7.23
+Other   |            | 0.037      |            |       |  0.15
 
 Nlocal:       125000.0 ave      125000 max      125000 min
 Histogram: 1 0 0 0 0 0 0 0 0 0
@@ -181,7 +181,6 @@ Histogram: 1 0 0 0 0 0 0 0 0 0
 
 Total # of neighbors = 5375000
 Ave neighs/atom = 43.000000
-Ave special neighs/atom = 0.0000000
 Neighbor list builds = 0
 Dangerous builds = 0
 #velocity        all set 5 NULL NULL sum yes units box
@@ -193,4 +192,4 @@ write_restart     block_28_14_14_${starttemp}.restart
 write_restart     block_28_14_14_300.restart
 write_restart   config${filename}
 write_restart   configblock_28_14_14
-Total wall time: 0:00:15
+Total wall time: 0:00:26
