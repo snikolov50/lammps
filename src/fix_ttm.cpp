@@ -47,7 +47,7 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
   flangevin(NULL), T_electron(NULL), T_electron_old(NULL), sum_vsq(NULL),
   sum_mass_vsq(NULL), sum_vsq_all(NULL), sum_mass_vsq_all(NULL),
   net_energy_transfer(NULL), net_energy_transfer_all(NULL), u_node(NULL), v_node(NULL), w_node(NULL), nvel(NULL),
-  u_node_all(NULL), v_node_all(NULL), w_node_all(NULL), nvel_all(NULL), id_lang(NULL)
+  u_node_all(NULL), v_node_all(NULL), w_node_all(NULL), nvel_all(NULL)
 {
   if (narg < 20) error->all(FLERR,"Illegal fix ttm command");
   vector_flag = 1;
@@ -59,6 +59,7 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
   restart_global = 1;
   biasflag = 0;
   id_temp = NULL;
+  convflag = 0;
   //  temperature = NULL;
   check_temp_flag = 0;
   int conv_err = 1;
@@ -68,22 +69,19 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
   maxatom1 = 0;
   for (int index = 0; index < (narg-1); index++){
 
-     if (strcmp(arg[index],"lang")==0){
-        if (index+1 > narg-1) {error->all(FLERR,"Improper lang option for fix ttm");}
+     if (strcmp(arg[index],"lang")==0) {
+        if (index+1 > narg-1) error->all(FLERR,"Illegal fix ttm command");
         strncpy(lang_fix_name,arg[index+1],100); 
         lang_err = 0;
      }
 
-     if (strcmp(arg[index],"conv")==0){
+     if (strcmp(arg[index],"conv")==0) {
          conv_err = 0;
-         if (index+2 > narg-1) {error->all(FLERR,"Improper conv option for fix ttm");}
+         if (index+2 > narg-1) error->all(FLERR,"Illegal fix ttm command");
          Nlimit = force->inumeric(FLERR,arg[index+2]);
-         if (strcmp(arg[index+1],"yes") == 0){
-            convflag = 1;
-         }
-         else {
-            convflag = 0;  
-         }
+         if (strcmp(arg[index+1],"yes") == 0) convflag = 1;
+         else if (strcmp(arg[index+1],"no") == 0) convflag = 0;
+         else error->all(FLERR,"Illegal fix ttm command");
      }
 
 //     if (strcmp(arg[index],"e_stop")==0){
@@ -126,8 +124,7 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
 
   if (nfileevery) {
     if (narg != 20) error->all(FLERR,"Illegal fix ttm command");
-    MPI_Comm_rank(world,&me);
-    if (me == 0) {
+    if (comm->me == 0) {
       fp = fopen(arg[14],"w");
       if (fp == NULL) {
         char str[128];
@@ -171,18 +168,22 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
                  "ttm:sum_mass_vsq_all");
   memory->create(T_electron_old,nxnodes,nynodes,nznodes,"ttm:T_electron_old");
   memory->create(T_electron,nxnodes,nynodes,nznodes,"ttm:T_electron");
-  memory->create(u_node,nxnodes,nynodes,nznodes,"ttm:u_node");
-  memory->create(v_node,nxnodes,nynodes,nznodes,"ttm:v_node");
-  memory->create(w_node,nxnodes,nynodes,nznodes,"ttm:w_node");
-  memory->create(nvel,nxnodes,nynodes,nznodes,"ttm:nvel"); 
-  memory->create(u_node_all,nxnodes,nynodes,nznodes,"ttm:u_node_all");
-  memory->create(v_node_all,nxnodes,nynodes,nznodes,"ttm:v_node_all");
-  memory->create(w_node_all,nxnodes,nynodes,nznodes,"ttm:w_node_all");
-  memory->create(nvel_all,nxnodes,nynodes,nznodes,"ttm:nvel_all");
   memory->create(net_energy_transfer,nxnodes,nynodes,nznodes,
                  "TTM:net_energy_transfer");
   memory->create(net_energy_transfer_all,nxnodes,nynodes,nznodes,
                  "TTM:net_energy_transfer_all");
+
+  memory->create(nvel,nxnodes,nynodes,nznodes,"ttm:nvel"); 
+  memory->create(nvel_all,nxnodes,nynodes,nznodes,"ttm:nvel_all");
+
+  if (convflag==1) {
+    memory->create(u_node,nxnodes,nynodes,nznodes,"ttm:u_node");
+    memory->create(v_node,nxnodes,nynodes,nznodes,"ttm:v_node");
+    memory->create(w_node,nxnodes,nynodes,nznodes,"ttm:w_node");
+    memory->create(u_node_all,nxnodes,nynodes,nznodes,"ttm:u_node_all");
+    memory->create(v_node_all,nxnodes,nynodes,nznodes,"ttm:v_node_all");
+    memory->create(w_node_all,nxnodes,nynodes,nznodes,"ttm:w_node_all");
+  }
 
   atom->add_callback(0);
   atom->add_callback(1);
@@ -211,16 +212,20 @@ FixTTM::~FixTTM()
   memory->destroy(sum_mass_vsq_all);
   memory->destroy(T_electron_old);
   memory->destroy(T_electron);
-  memory->destroy(u_node);
-  memory->destroy(v_node);
-  memory->destroy(w_node);
-  memory->destroy(nvel);
-  memory->destroy(u_node_all);
-  memory->destroy(v_node_all);
-  memory->destroy(w_node_all);
-  memory->destroy(nvel_all);
   memory->destroy(net_energy_transfer);
   memory->destroy(net_energy_transfer_all);
+
+  memory->destroy(nvel);
+  memory->destroy(nvel_all);
+
+  if (convflag==1) {
+    memory->destroy(u_node);
+    memory->destroy(v_node);
+    memory->destroy(w_node);
+    memory->destroy(u_node_all);
+    memory->destroy(v_node_all);
+    memory->destroy(w_node_all);
+  }
 }
 
 /* ---------------------------------------------------------------------- */
@@ -265,18 +270,6 @@ void FixTTM::init()
 //    error->all(FLERR,"Cannot use non-periodic boundaries with fix ttm");
   if (domain->triclinic)
     error->all(FLERR,"Cannot use fix ttm with triclinic box");
-
-  for (int ixnode = 0; ixnode < nxnodes; ixnode++){
-    for (int iynode = 0; iynode < nynodes; iynode++){
-      for (int iznode = 0; iznode < nznodes; iznode++){
-         net_energy_transfer_all[ixnode][iynode][iznode] = 0;
-         u_node_all[ixnode][iynode][iznode] = 0;
-         v_node_all[ixnode][iynode][iznode] = 0;
-         w_node_all[ixnode][iynode][iznode] = 0;
-         nvel_all[ixnode][iynode][iznode] = 0;
-      }
-    }
-  }
 
   int tmp;
   int nlocal = atom->nlocal;
@@ -429,19 +422,17 @@ void FixTTM::end_of_step()
 
   double ***flangevin = (double ***) modify->fix[id_lang]->extract("flangevin",tmp);
 
-  for (int ixnode = 0; ixnode < nxnodes; ixnode++){
-    for (int iynode = 0; iynode < nynodes; iynode++){
-      for (int iznode = 0; iznode < nznodes; iznode++){
-
-        net_energy_transfer[ixnode][iynode][iznode] = 0;
-        u_node[ixnode][iynode][iznode] = 0;
-        v_node[ixnode][iynode][iznode] = 0;
-        w_node[ixnode][iynode][iznode] = 0;
-        nvel[ixnode][iynode][iznode] = 0;
-
+  for (int ixnode = 0; ixnode < nxnodes; ixnode++)
+    for (int iynode = 0; iynode < nynodes; iynode++)
+      for (int iznode = 0; iznode < nznodes; iznode++) {
+        net_energy_transfer[ixnode][iynode][iznode] = 0.0;
+        nvel[ixnode][iynode][iznode] = 0.0;
+        if (convflag==1) {
+          u_node[ixnode][iynode][iznode] = 0.0;
+          v_node[ixnode][iynode][iznode] = 0.0;
+          w_node[ixnode][iynode][iznode] = 0.0;
+        }
       }
-    }
-  }
 
   for (int i = 0; i < nlocal; i++){
     if (mask[i] & groupbit) {
@@ -467,11 +458,12 @@ void FixTTM::end_of_step()
          temperature_lang->remove_bias(i,v[i]);
       }
 
-      if (convflag==1){
+      nvel[ixnode][iynode][iznode] += 1.0;
+
+      if (convflag==1) {
          u_node[ixnode][iynode][iznode] += v[i][0];
          v_node[ixnode][iynode][iznode] += v[i][1];
          w_node[ixnode][iynode][iznode] += v[i][2];
-         nvel[ixnode][iynode][iznode] += 1;
       }
 
       net_energy_transfer[ixnode][iynode][iznode] +=
@@ -481,11 +473,13 @@ void FixTTM::end_of_step()
   }
 
   MPI_Allreduce(&net_energy_transfer[0][0][0],&net_energy_transfer_all[0][0][0],total_nnodes,MPI_DOUBLE,MPI_SUM,world);
-  MPI_Allreduce(&u_node[0][0][0],&u_node_all[0][0][0],total_nnodes,MPI_DOUBLE,MPI_SUM,world);
-  MPI_Allreduce(&v_node[0][0][0],&v_node_all[0][0][0],total_nnodes,MPI_DOUBLE,MPI_SUM,world);
-  MPI_Allreduce(&w_node[0][0][0],&w_node_all[0][0][0],total_nnodes,MPI_DOUBLE,MPI_SUM,world);
   MPI_Allreduce(&nvel[0][0][0],&nvel_all[0][0][0],total_nnodes,MPI_DOUBLE,MPI_SUM,world);
-  MPI_Comm_rank(world,&me);
+
+  if (convflag==1){
+    MPI_Allreduce(&u_node[0][0][0],&u_node_all[0][0][0],total_nnodes,MPI_DOUBLE,MPI_SUM,world);
+    MPI_Allreduce(&v_node[0][0][0],&v_node_all[0][0][0],total_nnodes,MPI_DOUBLE,MPI_SUM,world);
+    MPI_Allreduce(&w_node[0][0][0],&w_node_all[0][0][0],total_nnodes,MPI_DOUBLE,MPI_SUM,world);
+  }
 
   double dx = domain->xprd/nxnodes;
   double dy = domain->yprd/nynodes;
@@ -522,18 +516,12 @@ void FixTTM::end_of_step()
 
     // compute new electron T profile
 
-    double Tc, Txr, Txl, Tyr, Tyl, Tzr, Tzl, u_vel, v_vel, w_vel, npar;;
+    double Tc, Txr, Txl, Tyr, Tyl, Tzr, Tzl, u_vel, v_vel, w_vel, nparinv;
 
     for (int ixnode = 0; ixnode < nxnodes; ixnode++) 
       for (int iynode = 0; iynode < nynodes; iynode++) 
         for (int iznode = 0; iznode < nznodes; iznode++) {
-          //          int right_xnode = ixnode + 1;
-          // APT:  Initial stab at pbc/nonbpbc boundaries
           Tc = T_electron_old[ixnode][iynode][iznode];
-          u_vel = u_node_all[ixnode][iynode][iznode];
-          v_vel = v_node_all[ixnode][iynode][iznode];
-          w_vel = w_node_all[ixnode][iynode][iznode];
-          npar  = nvel_all[ixnode][iynode][iznode];
 
           if (ixnode < nxnodes-1) Txr = T_electron_old[ixnode+1][iynode][iznode];
           else {
@@ -553,21 +541,23 @@ void FixTTM::end_of_step()
             else Tzr = 0.0;
           }
 
+          // APT: Note that I changed the [0] to [nxnodes-1], etc.
+
           if (ixnode > 0) Txl = T_electron_old[ixnode-1][iynode][iznode];
           else {
-            if (domain->periodicity[0]) Txl = T_electron_old[0][iynode][iznode];
+            if (domain->periodicity[0]) Txl = T_electron_old[nxnodes-1][iynode][iznode];
             else Txl = 0.0; 
           } 
 
           if (iynode > 0) Tyl = T_electron_old[ixnode][iynode-1][iznode];
           else {
-            if (domain->periodicity[1]) Tyl = T_electron_old[ixnode][0][iznode];
+            if (domain->periodicity[1]) Tyl = T_electron_old[ixnode][nynodes-1][iznode];
             else Tyl = 0.0;
           }
 
           if (iznode > 0) Tzl = T_electron_old[ixnode][iynode][iznode-1];
           else {
-            if (domain->periodicity[2]) Tzl = T_electron_old[ixnode][iynode][0];
+            if (domain->periodicity[2]) Tzl = T_electron_old[ixnode][iynode][nznodes-1];
             else Tzl = 0.0;
           }
 
@@ -581,10 +571,14 @@ void FixTTM::end_of_step()
              (net_energy_transfer_all[ixnode][iynode][iznode])/del_vol);
 
           if (convflag == 1) {
+            nparinv = 1.0/nvel_all[ixnode][iynode][iznode];
+            u_vel = u_node_all[ixnode][iynode][iznode];
+            v_vel = v_node_all[ixnode][iynode][iznode];
+            w_vel = w_node_all[ixnode][iynode][iznode];
             T_electron[ixnode][iynode][iznode] -=
-              u_vel*Txr*(0.5*(inner_dt/dx)/npar) + u_vel*Txl*(0.5*(inner_dt/dx)/npar) -
-              v_vel*Tyr*(0.5*(inner_dt/dy)/npar) + v_vel*Tyl*(0.5*(inner_dt/dy)/npar) -
-              w_vel*Tzr*(0.5*(inner_dt/dz)/npar) + w_vel*Tzl*(0.5*(inner_dt/dz)/npar);
+              u_vel*Txr*(0.5*(inner_dt/dx)*nparinv) + u_vel*Txl*(0.5*(inner_dt/dx)*nparinv) -
+              v_vel*Tyr*(0.5*(inner_dt/dy)*nparinv) + v_vel*Tyl*(0.5*(inner_dt/dy)*nparinv) -
+              w_vel*Tzr*(0.5*(inner_dt/dz)*nparinv) + w_vel*Tzl*(0.5*(inner_dt/dz)*nparinv);
           } 
           
         }
@@ -644,7 +638,7 @@ void FixTTM::end_of_step()
     MPI_Allreduce(&sum_mass_vsq[0][0][0],&sum_mass_vsq_all[0][0][0],
                   total_nnodes,MPI_DOUBLE,MPI_SUM,world);
 
-    if (me == 0) {
+    if (comm->me == 0) {
       fprintf(fp,BIGINT_FORMAT,update->ntimestep);
 
       double T_a;
