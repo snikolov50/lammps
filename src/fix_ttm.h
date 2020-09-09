@@ -69,6 +69,7 @@ class FixTTM : public Fix {
   double ***T_electron;
   int nxnodes,nynodes,nznodes,total_nnodes;
   int nodes_xyz[3];
+  int walls[3];
   double ***T_electron_old;
   double ***u_node,***u_node_all;
   double ***v_node,***v_node_all;

@@ -50,7 +50,8 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
   net_energy_transfer(NULL), net_energy_transfer_all(NULL), u_node(NULL), v_node(NULL), w_node(NULL), nvel(NULL),
   u_node_all(NULL), v_node_all(NULL), w_node_all(NULL), nvel_all(NULL), id_lang(NULL)
 {
-  if (narg < 12) error->all(FLERR,"Illegal fix ttm command");
+  int arg_count = 12;
+  if (narg < arg_count) error->all(FLERR,"Illegal fix ttm command");
   vector_flag = 1;
   size_vector = 4;
   global_freq = 1;
@@ -70,14 +71,22 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
   for (int index = 0; index < (narg-1); index++){
 
      if (strcmp(arg[index],"lang")==0){
-        if (index+1 > narg-1) {error->all(FLERR,"Illegal fix ttm command");}
+        if (index+1 > narg-1) error->all(FLERR,"Illegal fix ttm command");
         strncpy(lang_fix_name,arg[index+1],100); 
         lang_err = 0;
      }
 
+     if (strcmp(arg[index],"walls")==0){
+        if (index+3 > narg-1) error->all(FLERR,"Illegal fix ttm command");
+        walls[0] = force->inumeric(FLERR,arg[index+1]);
+        walls[1] = force->inumeric(FLERR,arg[index+2]);
+        walls[2] = force->inumeric(FLERR,arg[index+3]);
+        arg_count = arg_count + 4;       
+     }
+
      if (strcmp(arg[index],"conv")==0){
          conv_err = 0;
-         if (index+2 > narg-1) {error->all(FLERR,"Illegal fix ttm command");}
+         if (index+2 > narg-1) error->all(FLERR,"Illegal fix ttm command");
          Nlimit = force->inumeric(FLERR,arg[index+2]);
          if (strcmp(arg[index+1],"yes") == 0) convflag = 1;
          else if (strcmp(arg[index+1],"no") == 0) convflag = 0;
@@ -173,18 +182,7 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
   strcpy(fname,arg[6]);
 
   if (nfileevery)
-    if (narg != 12) error->all(FLERR,"Illegal fix ttm command");
-//    MPI_Comm_rank(world,&me);
-//    if (me == 0) {
-//      fp = fopen(arg[6],"w");
-//      if (fp == NULL) {
-//        char str[128];
-//        snprintf(str,128,"Cannot open fix ttm file %s",arg[6]);
-//        error->one(FLERR,str);
-//        fclose(fp);
-//      }
-//    }
-//  }
+    if (narg != arg_count) error->all(FLERR,"Illegal fix ttm command");
 
   // error check
 
@@ -547,36 +545,42 @@ void FixTTM::end_of_step()
           if (ixnode < nxnodes-1) Txr = T_electron_old[ixnode+1][iynode][iznode];
           else {
             if (domain->periodicity[0]) Txr = T_electron_old[0][iynode][iznode];
+            else if (walls[0]==1) Txr = T_electron_old[0][iynode][iznode];
             else Txr = 0.0;
           }
 
           if (iynode < nynodes-1) Tyr = T_electron_old[ixnode][iynode+1][iznode];
           else {
             if (domain->periodicity[1]) Tyr = T_electron_old[ixnode][0][iznode];
+            else if (walls[1]==1) Tyr = T_electron_old[ixnode][0][iznode];
             else Tyr = 0.0; 
           } 
 
           if (iznode < nznodes-1) Tzr = T_electron_old[ixnode][iynode][iznode+1];
           else {
             if (domain->periodicity[2]) Tzr = T_electron_old[ixnode][iynode][0];
+            else if (walls[2]==1) Tzr = T_electron_old[ixnode][iynode][0];
             else Tzr = 0.0;
           }
 
           if (ixnode > 0) Txl = T_electron_old[ixnode-1][iynode][iznode];
           else {
             if (domain->periodicity[0]) Txl = T_electron_old[nxnodes-1][iynode][iznode];
+            else if (walls[0]==1) Txl = T_electron_old[nxnodes-1][iynode][iznode];
             else Txl = 0.0; 
           } 
 
           if (iynode > 0) Tyl = T_electron_old[ixnode][iynode-1][iznode];
           else {
             if (domain->periodicity[1]) Tyl = T_electron_old[ixnode][nynodes-1][iznode];
+            else if (walls[1]==1) Tyl = T_electron_old[ixnode][nynodes-1][iznode];
             else Tyl = 0.0;
           }
 
           if (iznode > 0) Tzl = T_electron_old[ixnode][iynode][iznode-1];
           else {
             if (domain->periodicity[2]) Tzl = T_electron_old[ixnode][iynode][nznodes-1];
+            else if (walls[2]==1) Tzl = T_electron_old[ixnode][iynode][nznodes-1];
             else Tzl = 0.0;
           }
 
