@@ -1,0 +1,135 @@
+units metal
+dimension 3
+boundary p p p
+#atom_style atomic
+atom_style spin
+atom_modify map array
+
+#read_data Fe_polycrystal.lmp
+#read_restart RelaxedStructure1_300K_0atm_Fe.rst
+variable stemperature equal 300 # temperature in kelvin
+variable alattice equal 2.87 #3.316 # lattice constant (unit A)
+variable myseed equal 12345 # the value seed for the velocity
+variable xmax equal 30 # size in the x-direction
+variable ymax equal 30 # size in the y-direction
+
+variable zmax equal 50 # size in the z-direction
+variable time_step equal 0.001 # time step in pico seconds
+variable time_eq equal 100 # time steps for the equilibration part
+variable time_shock equal 500 # time steps for the piston
+variable vpiston equal 0.5 # piston speed in (km/s) multiply by ten to obtain (A/ps)
+variable Nevery equal 100 # use input values every this many timesteps
+variable Nrepeat equal 1 # number of times to use input values for calculating
+variable Nfreq equal 100 # calculate averages every this many timesteps
+variable deltaz equal 5 # thickness of spatial bins in dim (distance units)
+variable deltaz0 equal 10 # thickness of spatial bins in dim (distance units)
+variable deltaz1 equal 2 # thickness of spatial bins in dim (distance units)
+variable atomrate equal 100 # the rate in timestep that atoms are dump as CFG
+variable tdamp equal "v_time_step*100"
+variable pdamp equal "v_time_step*1000" 
+
+variable Up equal "10*v_vpiston"
+
+timestep ${time_step}
+
+lattice bcc ${alattice} origin 0.0 0.0 0.0 orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
+region sim_box block 0 ${xmax} 0 ${ymax} 0 ${zmax} # units for region are lattice (default)
+create_box 1 sim_box
+region atom_box block 0 ${xmax} 0 ${ymax} 0 ${zmax}
+create_atoms 1 region atom_box
+
+mass 1 55.845
+group bulk type 1
+include pot_iron.mod 
+thermo 10
+thermo_style custom step pxx pyy pzz lx ly lz temp etotal press
+#############################################EQUILIBRATION##########################################
+	variable         temp_equil equal 300.0
+	variable         press_equil equal 0.0
+	variable         nsteps_run equal 80000
+	variable         nsteps_out equal 1000
+	variable         nsteps_dmp equal ${nsteps_run}/10
+	variable         nsteps_rst equal ${nsteps_run}/10
+	velocity         all create ${temp_equil} 58928 dist gaussian mom yes rot yes units box
+
+# Run part 1 of the equilibration - Big Pdamp
+	variable         rsteps1 equal ${nsteps_run}/4
+	fix              1 all npt temp ${temp_equil} ${temp_equil} $(100.0*dt) x ${press_equil} ${press_equil} $(100000.0*dt) y ${press_equil} ${press_equil} $(100000.0*dt)
+	run              ${rsteps1} pre yes post yes
+# Run part 2 of the equilibration - Med Pdamp
+	unfix            1
+	variable         rsteps2 equal ${rsteps1}
+	fix              1 all npt temp ${temp_equil} ${temp_equil} $(100.0*dt) x ${press_equil} ${press_equil} $(10000.0*dt) y ${press_equil} ${press_equil} $(10000.0*dt)
+	run              ${rsteps2} pre yes post yes
+# Run part 3 of the equilibration - Sml Pdamp
+	unfix            1
+	variable         rsteps3 equal ${nsteps_run}-${rsteps2}-${rsteps1}
+	fix              1 all npt temp ${temp_equil} ${temp_equil} $(100.0*dt) x ${press_equil} ${press_equil} $(1000.0*dt) y ${press_equil} ${press_equil} $(1000.0*dt)
+	run              ${rsteps3} pre yes post yes
+	unfix            1
+# Run part 4 of the equilibration - Themalize with Langevin Thermostat
+	fix              1 all nve
+	fix              2 all langevin ${temp_equil} ${temp_equil} $(100.0*dt) 31415
+	write_data       RelaxedStructure_${temp_equil}K_${press_equil}atm_New.data
+	write_restart    RelaxedStructure_${temp_equil}K_${press_equil}atm_New.rst
+	run              120000
+	unfix            1
+	unfix            2
+# Run part 5: writting the data
+	write_data       RelaxedStructure1_${temp_equil}K_${press_equil}atm_Fe.data
+	write_restart    RelaxedStructure1_${temp_equil}K_${press_equil}atm_Fe.rst
+
+#thermo 10
+#thermo_style custom step pxx pyy pzz lx ly lz temp etotal pressure
+#############################################EQUILIBRATION##########################################
+#run ${time_eq}
+change_box all boundary p p f
+reset_timestep 0
+fix 1zzz 	all nve
+#fix             melt all ttm input_ttm temp_300_nx_10_ny_10_nz_150 100 electron.Te lang flang conv yes 50
+#fix             flang all langevin 0.0 0.0 1.88735 1041 ttm
+#fix_modify      flang energy yes
+
+variable wallPositionH equal "143.5 - v_Up*step*v_time_step"
+variable wallPositionL equal "0 + v_Up*step*v_time_step"
+fix wallZ all wall/reflect zlo v_wallPositionL zhi v_wallPositionH units box
+
+#fix def 	all deform 1 z erate -0.0031675641 units box remap none
+#compute myTemp  all temp/deform
+compute mytemp  all temp/profile 0 0 1 z 150 out bin
+fix             melt all ttm input_ttm temp_300_nx_10_ny_10_nz_34 100 electron.Te lang flang conv no 50 walls 0 0 1
+fix             flang all langevin 0.0 0.0 1.88735 1041 ttm
+#fix_modify      flang temp mytemp
+
+compute myKE    bulk ke/atom
+compute myPE    bulk pe/atom
+compute myCOM   bulk com
+compute peratom bulk stress/atom NULL
+compute vz bulk property/atom vz
+compute vorvol  bulk voronoi/atom
+
+#compute density_profile1 bulk chunk/atom bin/1d z lower ${deltaz0} units box
+#fix density_profile bulk ave/chunk ${Nevery} ${Nrepeat} ${Nfreq} density_profile1 density/mass file denz.profile
+
+#compute mytemp all temp/profile 0 0 1 z 200 out bin
+fix ave_temp all ave/time ${Nevery} ${Nrepeat} ${Nfreq} c_mytemp[1] c_mytemp[2] mode vector file temp_profile.txt
+
+#variable meanpress atom -(c_peratom[1]+c_peratom[2]+c_peratom[3])/3/c_vorvol[1]
+#compute pressure_profile1 bulk chunk/atom bin/1d z lower ${deltaz1} units box
+#fix pressure_profile bulk ave/chunk ${Nevery} ${Nrepeat} ${Nfreq} pressure_profile1 v_meanpress file pressure.profile
+
+#compute velZ_profile1 bulk chunk/atom bin/1d z lower ${deltaz} units box
+#fix velZ_profile bulk ave/chunk ${Nevery} ${Nrepeat} ${Nfreq} velZ_profile1 c_vz file velocityZcomp.profile
+
+dump         100 all custom 100 dump_iron_lammpstrj.* id type x y z vx vy vz fx fy fz
+
+thermo 10
+thermo_style custom step pxx pyy pzz lx ly lz temp etotal press
+
+restart 1000 restart.0 restart.1
+run ${time_shock}
+variable wallPositionH equal "143.5 - v_Up*500*v_time_step"
+variable wallPositionL equal "0 + v_Up*500*v_time_step"
+#unfix def
+
+run 30000

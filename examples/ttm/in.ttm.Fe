@@ -75,8 +75,10 @@ fix             1 all nve
 
 ###########################################################################   
 #compute 	mytemp all temp/com
-fix             melt all ttm 1.2470e-5 0.087614 0.00536462 29.5917 47.5679 58.4613 28 14 14 temp_1800_nx_28_ny_14_nz_14 ${dump_freq} ${filename}.Te lang flang conv no 50
-fix      	flang all langevin 0.0 0.0 1.88735 1041 ttm
+#fix             melt all ttm 1.2470e-5 0.087614 0.00536462 29.5917 47.5679 58.4613 28 14 14 temp_1800_nx_28_ny_14_nz_14 ${dump_freq} ${filename}.Te lang flang conv no 50
+#fix      	flang all langevin 0.0 0.0 1.88735 1041 ttm
+fix             melt all ttm input_ttm temp_1800_nx_28_ny_14_nz_14 100 electron.Te lang flang conv no 50 walls 0 0 1
+fix             flang all langevin 0.0 0.0 1.88735 1041 ttm
 fix_modify	flang energy yes
 #fix_modify      flang temp mytemp
 ########################################################################### 
