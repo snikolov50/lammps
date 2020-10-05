@@ -45,7 +45,8 @@ using namespace MathConst;
 FixLangevinSpin::FixLangevinSpin(LAMMPS *lmp, int narg, char **arg) :
   Fix(lmp, narg, arg), id_temp(NULL), random(NULL)
 {
-  if (narg != 8) error->all(FLERR,"Illegal langevin/spin command");
+  if (narg != 6 || narg != 8) 
+    error->all(FLERR,"Illegal langevin/spin command");
 
   dynamic_group_allow = 1;
   scalar_flag = 1;
@@ -94,6 +95,7 @@ FixLangevinSpin::FixLangevinSpin(LAMMPS *lmp, int narg, char **arg) :
 
 FixLangevinSpin_3tm::~FixLangevinSpin_3tm()
 {
+  memory->destroy(emrd);
   delete random;
 }
 
@@ -123,17 +125,24 @@ void FixLangevinSpin_3tm::init()
   }
   if (flag_force >= flag_lang) error->all(FLERR,"Fix langevin/spin has to come after all other spin fixes");
 
+  // test 3tm
+  nlocal_max = atom->nlocal;
+  memory->grow(emrd,nlocal_max,"fix/langevin/spin/3tm:emrd");
+
   gil_factor = 1.0/(1.0+(alpha_t)*(alpha_t));
   dts = 0.25 * update->dt;
   int tmp;
   double hbar = force->hplanck/MY_2PI;  // eV/(rad.THz)
   double kb = force->boltz;             // eV/K
+  
+  // noise amplitude calculation
+  
   // D = (MY_2PI*alpha_t*gil_factor*kb*temp);
   double ***T_el = (double ***) modify->fix[id_ttm]->extract("electron_temp",tmp);
   D = (alpha_t*gil_factor*kb*T_el);
   // D = (12.0/MY_2PI)*(MY_2PI*alpha_t*gil_factor*kb*temp);
   D /= (hbar*dts);
-  sigma = sqrt(6.0*D);
+  sigma = sqrt(6.0*D); // to be checked
 }
 
 /* ---------------------------------------------------------------------- */
@@ -164,6 +173,52 @@ void FixLangevinSpin_3tm::add_tdamping(double spi[3], double fmi[3])
 
 /* ---------------------------------------------------------------------- */
 
+// test
+
+void FixLangevinSpin_3tm::setup(int vflag)
+{
+  // if 3tm, check size of emrd
+
+  if (3tm_flag == 1) {
+    if (nlocal_max < nlocal) {    // grow emag lists if necessary
+      nlocal_max = nlocal;
+      memory->grow(emrd,nlocal_max,"fix/langevin/spin/3tm:emrd");
+      memory->grow(Te,nlocal_max,"fix/langevin/spin/3tm:Te");
+    }
+    
+    Te = allocate(Te_grid);
+  }
+}
+
+void FixLangevinSpin_3tm::add_temperature_3tm(int i, double spi[3], double fmi[3])
+{
+
+  double sigma = f(Te[i]);
+
+  double rx = sigma*random->gaussian();
+  double ry = sigma*random->gaussian();
+  double rz = sigma*random->gaussian();
+
+  // compute random mag. energy
+
+  emrd[i] = hbar*(rx*spi[0]+ry*spi[1]+rz*spi[2]);
+
+  // adding the random field
+
+  fmi[0] += rx;
+  fmi[1] += ry;
+  fmi[2] += rz;
+
+  // adding gilbert's prefactor
+
+  fmi[0] *= gil_factor;
+  fmi[1] *= gil_factor;
+  fmi[2] *= gil_factor;
+
+}
+
+/* ---------------------------------------------------------------------- */
+
 void FixLangevinSpin_3tm::add_temperature(double fmi[3])
 {
 
@@ -173,6 +228,10 @@ void FixLangevinSpin_3tm::add_temperature(double fmi[3])
   double rx = sigma*random->gaussian();
   double ry = sigma*random->gaussian();
   double rz = sigma*random->gaussian();
+
+  // compute random mag. energy
+
+  // eni = hbar*(rx*spi[0]+ry*spi[1]+rz*spi[2]);
 
   // adding the random field
 

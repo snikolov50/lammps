@@ -483,6 +483,9 @@ void FixNVESpin::ComputeInteractionsSpin(int i)
     if (temp_flag) {                    // spin temperature
       locklangevinspin->add_temperature(fmi);
     }
+    if (3tm_flag) {                    // 3tm temperature
+      locklangevinspin->add_temperature_3tm(i,spi,fmi);
+    }
   }
 
   // update setforce of magnetic interactions

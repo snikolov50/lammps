@@ -34,6 +34,7 @@ class FixLangevinSpin_3tm : public Fix {
   void post_force_respa(int, int, int);
   void add_tdamping(double *, double *);                 // add transverse damping
   void add_temperature(double *);                        // add temperature
+  void add_temperature_3tm(double *);                    // add temperature 3tm
   int tdamp_flag, ldamp_flag, temp_flag;                 // damping and temperature flags
   virtual void *extract(const char *, int &);
  protected:
@@ -49,6 +50,11 @@ class FixLangevinSpin_3tm : public Fix {
   int nlevels_respa;
   class RanMars *random;
   int seed;
+
+  // test 3tm
+  int 3tm_flag;
+  double *emrd;
+  double *Te;
 
 };
 
