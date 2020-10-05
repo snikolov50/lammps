@@ -48,7 +48,7 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
   flangevin(NULL), T_electron(NULL), T_electron_old(NULL), sum_vsq(NULL),
   sum_mass_vsq(NULL), sum_vsq_all(NULL), sum_mass_vsq_all(NULL),
   net_energy_transfer(NULL), net_energy_transfer_all(NULL), u_node(NULL), v_node(NULL), w_node(NULL), nvel(NULL),
-  u_node_all(NULL), v_node_all(NULL), w_node_all(NULL), nvel_all(NULL), id_lang(NULL)
+  u_node_all(NULL), v_node_all(NULL), w_node_all(NULL), nvel_all(NULL), id_lang(NULL), id_spin(NULL)
 {
   int arg_count = 12;
   if (narg < arg_count) error->all(FLERR,"Illegal fix ttm command");
@@ -65,6 +65,7 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
   check_temp_flag = 0;
   int conv_err = 1;
   int lang_err = 1;
+  int spin_err = 1;
 //  int estop_err = 1;
   maxatom = 0;
   maxatom1 = 0;
@@ -74,6 +75,12 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
         if (index+1 > narg-1) error->all(FLERR,"Illegal fix ttm command");
         strncpy(lang_fix_name,arg[index+1],100); 
         lang_err = 0;
+     }
+
+     if (strcmp(arg[index],"spin")==0){
+        if (index+1 > narg-1) error->all(FLERR,"Illegal fix ttm command");
+        strncpy(spin_fix_name,arg[index+1],100);
+        spin_err = 0;
      }
 
      if (strcmp(arg[index],"walls")==0){
@@ -110,6 +117,7 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
   
   if (lang_err == 1) error->all(FLERR,"No langevin fix name provided: coupling to fix ttm not possible");
   if (conv_err == 1) error->all(FLERR,"Convective option not specified");
+  if (spin_err == 1) error->all(FLERR,"No langevin/spin fix name provided: coupling to fix ttm not possible");
 //  if (estop_err == 1) {error->all(FLERR,"Electron stopping option not specified");}
   const char *filename = arg[3];
   FILE *fpr_2 = force->open_potential(arg[3]);
@@ -293,6 +301,14 @@ void FixTTM::init()
      if (whichfix == (modify->nfix-1)) error->universe_all(FLERR,"langevin fix ID is not defined");
   }
 
+  for (int whichfix = 0; whichfix < modify->nfix; whichfix++) {
+     if (strcmp(spin_fix_name,modify->fix[whichfix]->id) == 0){
+         id_spin = whichfix;
+         break;
+     }
+     if (whichfix == (modify->nfix-1)) error->universe_all(FLERR,"langevin fix ID is not defined");
+  }
+
   if (domain->dimension == 2)
     error->all(FLERR,"Cannot use fix ttm with 2d simulation");
 //  if (domain->nonperiodic != 0)
@@ -454,7 +470,7 @@ void FixTTM::end_of_step()
   int nlocal = atom->nlocal;              
 
   double ***flangevin = (double ***) modify->fix[id_lang]->extract("flangevin",tmp);
-
+  double ***s_flangevin = (double ***) modify->fix[id_spin]->extract("spin_flangevin",tmp);
   for (int ixnode = 0; ixnode < nxnodes; ixnode++)
     for (int iynode = 0; iynode < nynodes; iynode++)
       for (int iznode = 0; iznode < nznodes; iznode++){
@@ -486,7 +502,8 @@ void FixTTM::end_of_step()
 
       net_energy_transfer[ixnode][iynode][iznode] +=
         ((*flangevin)[i][0]*v[i][0] + (*flangevin)[i][1]*v[i][1] +
-         (*flangevin)[i][2]*v[i][2]);
+         (*flangevin)[i][2]*v[i][2]) + ((*s_flangevin)[i][0]*v[i][0] + (*s_flangevin)[i][1]*v[i][1] +
+         (*s_flangevin)[i][2]*v[i][2]);;
     }
   }
 

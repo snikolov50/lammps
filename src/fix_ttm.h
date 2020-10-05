@@ -41,6 +41,7 @@ class FixTTM : public Fix {
 //   int modify_param(int, char **);
 //   virtual void *extract(const char *, int&);
   char lang_fix_name[100];
+  char spin_fix_name[100];
   char fname[100];
  protected:
   char *id_temp;
@@ -56,6 +57,7 @@ class FixTTM : public Fix {
   int convflag;
   int estopflag;
   int id_lang;
+  int id_spin;
   int *langbias;  
   int biasflag;
   int nfileevery;
