@@ -33,7 +33,6 @@ class FixLangevinSpin_3tm : public Fix {
   void setup(int);
   void post_force_respa(int, int, int);
   void add_tdamping(double *, double *);                 // add transverse damping
-  void add_temperature(double *);                        // add temperature
   void add_temperature_3tm(double *);                    // add temperature 3tm
   int tdamp_flag, ldamp_flag, temp_flag;                 // damping and temperature flags
   virtual void *extract(const char *, int &);
@@ -41,9 +40,10 @@ class FixLangevinSpin_3tm : public Fix {
   double alpha_t;               // transverse mag. damping
   double dts;                   // magnetic timestep
   double temp;                  // spin bath temperature
-  double D,sigma;               // bath intensity var.
+  double D;               // bath intensity var.
   double gil_factor;            // gilbert's prefactor
   char ttm_name[100];
+  int id_lang; 
   char *id_temp;
   class Compute *temperature;
 
@@ -54,7 +54,7 @@ class FixLangevinSpin_3tm : public Fix {
   // test 3tm
   int 3tm_flag;
   double *emrd;
-  double *Te;
+  double *sigma;
 
 };
 

@@ -470,7 +470,7 @@ void FixTTM::end_of_step()
   int nlocal = atom->nlocal;              
 
   double ***flangevin = (double ***) modify->fix[id_lang]->extract("flangevin",tmp);
-  double ***s_flangevin = (double ***) modify->fix[id_spin]->extract("spin_flangevin",tmp);
+  double **emrd = (double **) modify->fix[id_spin]->extract("emrd",tmp);
   for (int ixnode = 0; ixnode < nxnodes; ixnode++)
     for (int iynode = 0; iynode < nynodes; iynode++)
       for (int iznode = 0; iznode < nznodes; iznode++){
@@ -502,8 +502,7 @@ void FixTTM::end_of_step()
 
       net_energy_transfer[ixnode][iynode][iznode] +=
         ((*flangevin)[i][0]*v[i][0] + (*flangevin)[i][1]*v[i][1] +
-         (*flangevin)[i][2]*v[i][2]) + ((*s_flangevin)[i][0]*v[i][0] + (*s_flangevin)[i][1]*v[i][1] +
-         (*s_flangevin)[i][2]*v[i][2]);;
+         (*flangevin)[i][2]*v[i][2]) + *emrd[i];
     }
   }
 

@@ -36,6 +36,7 @@ class FixLangevinSpin : public Fix {
   void add_temperature(double *);                        // add temperature
   void add_temperature_3tm(int, double *, double *);
   int tdamp_flag, ldamp_flag, temp_flag, ttm_flag;                 // damping and temperature flags
+  virtual void *extract(const char *, int &);
 
  protected:
   double alpha_t;               // transverse mag. damping

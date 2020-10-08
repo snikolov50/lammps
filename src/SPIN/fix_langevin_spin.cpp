@@ -284,7 +284,7 @@ void FixLangevinSpin::post_force_respa(int vflag, int ilevel, int /*iloop*/)
 void *FixLangevinSpin_3tm::extract(const char *str, int &dim)
 {
   if (strcmp(str,"emrd") == 0) {
-    dim = 2;
+    dim = 1;
     return &emrd;
   }
   return NULL;
