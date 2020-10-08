@@ -73,6 +73,23 @@ FixLangevinSpin::FixLangevinSpin(LAMMPS *lmp, int narg, char **arg) :
     temp_flag = 1;
   }
 
+  ttm_err = 1;
+  int iarg = 7;
+
+  while (iarg < narg) {
+
+     if (strcmp(arg[iarg],"lang")==0){
+        if (iarg+1 > narg-1) error->all(FLERR,"Illegal fix langevin/spin/3tm command");
+        strncpy(lang_name,arg[iarg+1],100);
+        ttm_err = 0;
+     }
+
+     iarg++;
+
+  }
+
+  if (ttm_err == 1) error->all(FLERR,"Coupling to fix ttm not possible");
+
   // initialize Marsaglia RNG with processor-unique seed
 
   // random = new RanPark(lmp,seed + comm->me);
@@ -85,6 +102,8 @@ FixLangevinSpin::FixLangevinSpin(LAMMPS *lmp, int narg, char **arg) :
 FixLangevinSpin::~FixLangevinSpin()
 {
   delete random;
+  memory->destroy(emrd);
+  if (ttm_flag == 1) memory->destroy(sigma_ttm);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -105,6 +124,14 @@ void FixLangevinSpin::init()
 {
   // fix_langevin_spin has to be the last defined fix
 
+  for (int whichfix = 0; whichfix < modify->nfix; whichfix++) {
+     if (strcmp(lang_name,modify->fix[whichfix]->id) == 0){
+         id_lang = whichfix;
+         break;
+     }
+     if (whichfix == (modify->nfix-1)) error->universe_all(FLERR,"langevin fix ID for lattice is not defined");
+  }
+
   int flag_force = 0;
   int flag_lang = 0;
   for (int i = 0; i < modify->nfix; i++) {
@@ -115,15 +142,31 @@ void FixLangevinSpin::init()
 
   gil_factor = 1.0/(1.0+(alpha_t)*(alpha_t));
   dts = 0.25 * update->dt;
-
   double hbar = force->hplanck/MY_2PI;  // eV/(rad.THz)
   double kb = force->boltz;             // eV/K
-  // D = (MY_2PI*alpha_t*gil_factor*kb*temp);
 
-  D = (alpha_t*gil_factor*kb*temp);
-  // D = (12.0/MY_2PI)*(MY_2PI*alpha_t*gil_factor*kb*temp);
-  D /= (hbar*dts);
-  sigma = sqrt(2.0*D);
+  if (ttm_flag == 1){
+	  nlocal_max = atom->nlocal;
+	  memory->grow(emrd,nlocal_max,"fix/langevin/spin:emrd");
+	  memory->grow(sigma_ttm,nlocal_max,"fix/langevin/spin:sigma_ttm");
+          int tmp;
+          double **ptr_T_el = (double **) modify->fix[id_lang]->extract("ptr_tforce",tmp);
+	  for (int i = 0; i < nlocal_max; i++){
+
+	      D = (alpha_t*gil_factor*kb*(*ptr_T_el)[i]);
+	      D /= (hbar*dts);
+	      sigma_ttm[i] = sqrt(6.0*D); // to be checked
+
+	  }
+  }
+  
+  else {
+	  D = (alpha_t*gil_factor*kb*temp);
+	  // D = (12.0/MY_2PI)*(MY_2PI*alpha_t*gil_factor*kb*temp);
+	  D /= (hbar*dts);
+	  sigma = sqrt(2.0*D);
+  }
+
 }
 
 /* ---------------------------------------------------------------------- */
@@ -135,6 +178,15 @@ void FixLangevinSpin::setup(int vflag)
     post_force_respa(vflag,nlevels_respa-1,0);
     ((Respa *) update->integrate)->copy_f_flevel(nlevels_respa-1);
   } else post_force(vflag);
+ 
+  if (ttm_flag == 1) {
+    if (nlocal_max < nlocal) {    // grow emag lists if necessary
+      nlocal_max = nlocal;
+      memory->grow(emrd,nlocal_max,"fix/langevin/spin:emrd");
+      memory->grow(sigma_ttm,nlocal_max,"fix/langevin/spin:sigma_ttm");
+    }  
+  }
+
 }
 
 /* ---------------------------------------------------------------------- */
@@ -181,8 +233,59 @@ void FixLangevinSpin::add_temperature(double fmi[3])
 
 /* ---------------------------------------------------------------------- */
 
+void FixLangevinSpin::add_temperature_3tm(int i, double spi[3], double fmi[3])
+{
+
+//  double sigma[i] = f(Te[i]);
+
+  double **ptr_T_el = (double **) modify->fix[id_lang]->extract("ptr_tforce",tmp);
+
+  for (int i = 0; i < nlocal_max; i++){
+      
+      D = (alpha_t*gil_factor*kb*(*ptr_T_el)[i]);
+      D /= (hbar*dts);
+      sigma[i] = sqrt(6.0*D); // to be checked
+
+  }
+
+  double rx = sigma[i]*random->gaussian();
+  double ry = sigma[i]*random->gaussian();
+  double rz = sigma[i]*random->gaussian();
+
+  // compute random mag. energy
+
+  emrd[i] = hbar*(rx*spi[0]+ry*spi[1]+rz*spi[2]);
+
+  // adding the random field
+
+  fmi[0] += rx;
+  fmi[1] += ry;
+  fmi[2] += rz;
+
+  // adding gilbert's prefactor
+
+  fmi[0] *= gil_factor;
+  fmi[1] *= gil_factor;
+  fmi[2] *= gil_factor;
+
+}
+
+/* ---------------------------------------------------------------------- */
+
 void FixLangevinSpin::post_force_respa(int vflag, int ilevel, int /*iloop*/)
 {
   if (ilevel == nlevels_respa-1) post_force(vflag);
 }
 
+/* ----------------------------------------------------------------------
+ *    extract energy of fluctuating langevin term (to be added to electrons)
+ *    ------------------------------------------------------------------------- */
+
+void *FixLangevinSpin_3tm::extract(const char *str, int &dim)
+{
+  if (strcmp(str,"emrd") == 0) {
+    dim = 2;
+    return &emrd;
+  }
+  return NULL;
+}
