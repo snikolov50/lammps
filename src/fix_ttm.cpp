@@ -81,6 +81,7 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
         if (index+1 > narg-1) error->all(FLERR,"Illegal fix ttm command");
         strncpy(spin_fix_name,arg[index+1],100);
         spin_err = 0;
+        arg_count = arg_count + 2;
      }
 
      if (strcmp(arg[index],"walls")==0){
@@ -343,6 +344,35 @@ void FixTTM::init()
        (*ptr_flangevin)[i][1] = 0;
        (*ptr_flangevin)[i][2] = 0;
   }
+
+    
+  int nxnodes = nodes_xyz[0];
+  int nynodes = nodes_xyz[1];
+  int nznodes = nodes_xyz[2];
+
+  double **x = atom->x;
+  int *mask = atom->mask;
+
+  double **ptr_tforce = (double **) modify->fix[id_lang]->extract("ptr_tforce",tmp);
+  if (atom->nmax > maxatom1) {
+    maxatom1 = atom->nmax;
+    memory->destroy(*ptr_tforce);
+    memory->create(*ptr_tforce,maxatom1,"ttm:langevin:tforce");
+  }
+
+  for (int i = 0; i < nlocal; i++){
+    if (mask[i] & groupbit) {
+      domain->x2lamda_remap(x[i], lamda);
+      int ixnode = static_cast<int>(lamda[0]*nxnodes);
+      int iynode = static_cast<int>(lamda[1]*nynodes);
+      int iznode = static_cast<int>(lamda[2]*nznodes);
+
+      (*ptr_tforce)[i] = T_electron[ixnode][iynode][iznode];
+      if ((*ptr_tforce)[i] < 0.0)
+        error->one(FLERR, "Fix ttm returned negative electron temperature");
+    }
+  }
+
 }
 /* ---------------------------------------------------------------------- */
 
@@ -377,6 +407,7 @@ void FixTTM::read_initial_electron_temperatures()
   // close file
 
   fclose(fpr);
+
 }
 
 /* ---------------------------------------------------------------------- */

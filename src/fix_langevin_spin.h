@@ -34,7 +34,9 @@ class FixLangevinSpin : public Fix {
   void post_force_respa(int, int, int);
   void add_tdamping(double *, double *);                 // add transverse damping
   void add_temperature(double *);                        // add temperature
-  int tdamp_flag, ldamp_flag, temp_flag;                 // damping and temperature flags
+  void add_temperature_3tm(int, double *, double *);
+  int tdamp_flag, ldamp_flag, temp_flag, ttm_flag;                 // damping and temperature flags
+  virtual void *extract(const char *, int &);
 
  protected:
   double alpha_t;               // transverse mag. damping
@@ -49,6 +51,13 @@ class FixLangevinSpin : public Fix {
   int nlevels_respa;
   class RanMars *random;
   int seed;
+  int nlocal_max;
+// ttm
+
+  double *emrd;
+  double *sigma_ttm;
+  char lang_name[100];
+  int id_lang;
 
 };
 
