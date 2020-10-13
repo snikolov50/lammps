@@ -124,6 +124,7 @@ FixNVESpin::FixNVESpin(LAMMPS *lmp, int narg, char **arg) :
   precession_spin_flag = 0;
   maglangevin_flag = 0;
   tdamp_flag = temp_flag = 0;
+  ttm_flag = 0;
   setforce_spin_flag = 0;
 
 }
@@ -237,6 +238,7 @@ void FixNVESpin::init()
   if (maglangevin_flag) {
    if (locklangevinspin->tdamp_flag == 1) tdamp_flag = 1;
    if (locklangevinspin->temp_flag == 1) temp_flag = 1;
+   if (locklangevinspin->ttm_flag == 1) ttm_flag = 1;
   }
 
   // ptrs FixSetForceSpin classes

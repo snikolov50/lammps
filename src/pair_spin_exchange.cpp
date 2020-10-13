@@ -144,10 +144,6 @@ void *PairSpinExchange::extract(const char *str, int &dim)
 {
   dim = 0;
   if (strcmp(str,"cut") == 0) return (void *) &cut_spin_exchange_global;
-  if (strcmp(str,"spin_force") == 0) {
-    dim = 1;
-    return &fi;
-  }
   return NULL;
 }
 
@@ -521,5 +517,3 @@ void PairSpinExchange::read_restart_settings(FILE *fp)
   MPI_Bcast(&offset_flag,1,MPI_INT,0,world);
   MPI_Bcast(&mix_flag,1,MPI_INT,0,world);
 }
-
-

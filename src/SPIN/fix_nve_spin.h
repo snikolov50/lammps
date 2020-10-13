@@ -59,6 +59,7 @@ friend class PairSpin;
   int precession_spin_flag;             // magnetic precession flags
   int maglangevin_flag;                 // magnetic langevin flags
   int tdamp_flag, temp_flag;
+  int ttm_flag;                         // ttm_flag = 1 for 3-T model
   int setforce_spin_flag;
 
   // pointers to magnetic fixes
