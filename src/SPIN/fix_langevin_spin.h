@@ -51,13 +51,15 @@ class FixLangevinSpin : public Fix {
   int nlevels_respa;
   class RanMars *random;
   int seed;
-
+  int nlocal_max;
 // ttm
 
   double *emrd;
+  double *emrd_all;
   double *sigma_ttm;
-  char ttm_name[100];
+  char lang_name[100];
   int id_lang;
+  double **ptr_T_el;
 
 };
 

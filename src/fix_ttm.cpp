@@ -245,7 +245,7 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
 
   // set initial electron temperatures from user input file
 
-  if (me == 0) read_initial_electron_temperatures();
+  if (me == 1) read_initial_electron_temperatures();
   MPI_Bcast(&T_electron[0][0][0],total_nnodes,MPI_DOUBLE,0,world);
 }
 
@@ -501,7 +501,7 @@ void FixTTM::end_of_step()
   int nlocal = atom->nlocal;              
 
   double ***flangevin = (double ***) modify->fix[id_lang]->extract("flangevin",tmp);
-  double **emrd = (double **) modify->fix[id_spin]->extract("emrd",tmp);
+  double **ptr_emrd = (double **) modify->fix[id_spin]->extract("emrd",tmp);
   for (int ixnode = 0; ixnode < nxnodes; ixnode++)
     for (int iynode = 0; iynode < nynodes; iynode++)
       for (int iznode = 0; iznode < nznodes; iznode++){
@@ -533,7 +533,7 @@ void FixTTM::end_of_step()
 
       net_energy_transfer[ixnode][iynode][iznode] +=
         ((*flangevin)[i][0]*v[i][0] + (*flangevin)[i][1]*v[i][1] +
-         (*flangevin)[i][2]*v[i][2]) + *emrd[i];
+         (*flangevin)[i][2]*v[i][2] + (*ptr_emrd)[i]);
     }
   }
 

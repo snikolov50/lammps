@@ -55,9 +55,11 @@ class FixLangevinSpin : public Fix {
 // ttm
 
   double *emrd;
+  double *emrd_all;
   double *sigma_ttm;
   char lang_name[100];
   int id_lang;
+  double **ptr_T_el;
 
 };
 
