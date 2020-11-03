@@ -33,6 +33,7 @@
 #include "compute.h"
 #include "iostream"
 #include "utils.h"
+#include <math.h>
 
 using namespace LAMMPS_NS;
 using namespace FixConst;
@@ -48,7 +49,7 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
   flangevin(NULL), T_electron(NULL), T_electron_old(NULL), sum_vsq(NULL),
   sum_mass_vsq(NULL), sum_vsq_all(NULL), sum_mass_vsq_all(NULL),
   net_energy_transfer(NULL), net_energy_transfer_all(NULL), u_node(NULL), v_node(NULL), w_node(NULL), nvel(NULL),
-  u_node_all(NULL), v_node_all(NULL), w_node_all(NULL), nvel_all(NULL), id_lang(NULL), id_spin(NULL)
+  u_node_all(NULL), v_node_all(NULL), w_node_all(NULL), nvel_all(NULL), id_lang(NULL), id_spin(NULL), electronic_specific_heat(NULL)
 {
   int arg_count = 12;
   if (narg < arg_count) error->all(FLERR,"Illegal fix ttm command");
@@ -132,9 +133,9 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
   double tresh_d;
   int tresh_i;
   // electronic_specific_heat
-  utils::sfgets(FLERR,linee,MAXLINE,fpr_2,filename,error);
-  sscanf(linee,"%lg",&tresh_d);
-  electronic_specific_heat = tresh_d;
+//  utils::sfgets(FLERR,linee,MAXLINE,fpr_2,filename,error);
+//  sscanf(linee,"%lg",&tresh_d);
+//  electronic_specific_heat = tresh_d;
 
   // electronic_density 
   utils::sfgets(FLERR,linee,MAXLINE,fpr_2,filename,error);
@@ -195,8 +196,8 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
 
   // error check
 
-  if (electronic_specific_heat <= 0.0)
-    error->all(FLERR,"Fix ttm electronic_specific_heat must be > 0.0");
+//  if (electronic_specific_heat <= 0.0)
+//    error->all(FLERR,"Fix ttm electronic_specific_heat must be > 0.0");
   if (electronic_density <= 0.0)
     error->all(FLERR,"Fix ttm electronic_density must be > 0.0");
   if (electronic_thermal_conductivity < 0.0)
@@ -239,7 +240,7 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
                  "TTM:net_energy_transfer");
   memory->create(net_energy_transfer_all,nxnodes,nynodes,nznodes,
                  "TTM:net_energy_transfer_all");
-
+  memory->create(electronic_specific_heat,atom->nlocal,"TTM:electronic_specific_heat");
   atom->add_callback(0);
   atom->add_callback(1);
 
@@ -277,6 +278,7 @@ FixTTM::~FixTTM()
   memory->destroy(nvel_all);
   memory->destroy(net_energy_transfer);
   memory->destroy(net_energy_transfer_all);
+  memory->destroy(electronic_specific_heat);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -332,6 +334,7 @@ void FixTTM::init()
   int tmp;
   int nlocal = atom->nlocal;
   double ***ptr_flangevin = (double ***) modify->fix[id_lang]->extract("flangevin",tmp);
+  double **x = atom->x;
 
   if (atom->nmax > maxatom) {
          memory->destroy(*ptr_flangevin);
@@ -343,6 +346,11 @@ void FixTTM::init()
        (*ptr_flangevin)[i][0] = 0;
        (*ptr_flangevin)[i][1] = 0;
        (*ptr_flangevin)[i][2] = 0;
+        domain->x2lamda_remap(x[i], lamda);
+        int ixnode = static_cast<int>(lamda[0]*nxnodes);
+        int iynode = static_cast<int>(lamda[1]*nynodes);
+        int iznode = static_cast<int>(lamda[2]*nznodes);
+        electronic_specific_heat[i] = 3*tanh(0.0002*T_electron[ixnode][iynode][iznode])*force->boltz;
   }
 
     
@@ -350,7 +358,6 @@ void FixTTM::init()
   int nynodes = nodes_xyz[1];
   int nznodes = nodes_xyz[2];
 
-  double **x = atom->x;
   int *mask = atom->mask;
 
   double **ptr_tforce = (double **) modify->fix[id_lang]->extract("ptr_tforce",tmp);
@@ -551,14 +558,23 @@ void FixTTM::end_of_step()
 
   // num_inner_timesteps = # of inner steps (thermal solves)
   // required this MD step to maintain a stable explicit solve
+    double el_spec_heat_min = 10000;
+    for (int i = 0; i < nlocal; i++){
+        domain->x2lamda_remap(x[i], lamda);
+        int ixnode = static_cast<int>(lamda[0]*nxnodes);
+        int iynode = static_cast<int>(lamda[1]*nynodes);
+        int iznode = static_cast<int>(lamda[2]*nznodes);
+        electronic_specific_heat[i] = 3*tanh(0.0002*T_electron[ixnode][iynode][iznode])*force->boltz;
+	if (electronic_specific_heat[i] < el_spec_heat_min) el_spec_heat_min = electronic_specific_heat[i];
+    }
 
   int num_inner_timesteps = 1;
   double inner_dt = update->dt;
   double stability_criterion = 1.0 -
-    2.0*inner_dt/(electronic_specific_heat*electronic_density) *
+    2.0*inner_dt/(el_spec_heat_min*electronic_density) *
     (electronic_thermal_conductivity*(1.0/dx/dx + 1.0/dy/dy + 1.0/dz/dz));
   if (stability_criterion < 0.0) {
-    inner_dt = 0.5*(electronic_specific_heat*electronic_density) /
+    inner_dt = 0.5*(el_spec_heat_min*electronic_density) /
       (electronic_thermal_conductivity*(1.0/dx/dx + 1.0/dy/dy + 1.0/dz/dz));
     num_inner_timesteps = static_cast<int>(update->dt/inner_dt) + 1;
     inner_dt = update->dt/double(num_inner_timesteps);
