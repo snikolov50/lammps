@@ -262,7 +262,7 @@ void FixLangevinSpin::add_temperature_3tm(int i, double spi[3], double fmi[3])
       
   D = (alpha_t*gil_factor*kb*(*ptr_T_el)[i]);
   D /= (hbar*dts);
-  sigma_ttm[i] = sqrt(6.0*D); // to be checked
+  sigma_ttm[i] = sqrt(2.0*D); // to be checked
 
 //  }
 
