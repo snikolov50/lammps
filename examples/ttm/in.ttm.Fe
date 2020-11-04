@@ -11,15 +11,15 @@ variable        boltz_real     equal 0.0019872041
 variable        boltz_metal    equal 8.617342e-5
 variable        boltz          equal ${boltz_metal}
 
-variable        lattice_const  equal 3.57772
+variable        lattice_const  equal 2.8
 variable        starttemp    equal 300
 
-variable xmax equal 6.0
-variable xmin equal -6.0
-variable ymax equal 6.0
-variable ymin equal -6.0
-variable zmax equal 6.0
-variable zmin equal -6.0
+variable xmax equal 16.0
+variable xmin equal -16.0
+variable ymax equal 16.0
+variable ymin equal -16.0
+variable zmax equal 16.0
+variable zmin equal -16.0
 #----------------------------------------------
 ##########################################
 units           metal
@@ -30,7 +30,7 @@ atom_modify map array
 boundary        p p p
 
 #read_restart    config5
-lattice         fcc ${lattice_const}
+lattice         bcc ${lattice_const}
 region sim_box block ${xmin} ${xmax} ${ymin} ${ymax} ${zmin} ${zmax} # units for region are lattice (default)
 create_box 1 sim_box
 #region atom_box block -24 -20 -12 -10 -12 -10
@@ -80,7 +80,7 @@ neigh_modify    every 5 delay 0 check yes
 #fix             melt all ttm 1.2470e-5 0.087614 0.00536462 29.5917 47.5679 58.4613 28 14 14 temp_1800_nx_28_ny_14_nz_14 ${dump_freq} ${filename}.Te lang flang conv no 50
 #fix      	flang all langevin 0.0 0.0 1.88735 1041 ttm
 #fix             spin3 all langevin/spin 300 0.1 1041 lang flang
-fix             melt all ttm input_ttm temp_1800_nx_10_ny_10_nz_10 1 electronF.Te lang flang conv no 50 walls 0 0 1 spin spin3
+fix             melt all ttm input_ttm temp_1800_nx_10_ny_10_nz_10 100 electronF.Te lang flang conv yes 50 walls 0 0 1 spin spin3
 #fix             spin3 all langevin/spin 300 0.1 1041 lang flang
 fix             flang all langevin 0.0 0.0 1.88735 1041 ttm
 fix             spin3 all langevin/spin 300 0.1 1041 lang flang
@@ -111,8 +111,8 @@ fix             4 all ave/chunk 1 ${dump_freq} ${dump_freq} temp_chunk v_temp fi
 # run    
 timestep        0.001
 thermo_style 	custom time step temp lx ly lz press pxx pyy pzz etotal epair enthalpy vol density f_melt[1] f_melt[2] f_flang
-thermo          1
-run             10000
+thermo          100
+run             300000
 #velocity        all set 5 NULL NULL sum yes units box
 #run 5000
 

@@ -132,11 +132,14 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
   char linee[MAXLINE];
   double tresh_d;
   int tresh_i;
+  specific_heat_flag = 0;
   // electronic_specific_heat
-//  utils::sfgets(FLERR,linee,MAXLINE,fpr_2,filename,error);
-//  sscanf(linee,"%lg",&tresh_d);
-//  electronic_specific_heat = tresh_d;
-
+  utils::sfgets(FLERR,linee,MAXLINE,fpr_2,filename,error);
+  sscanf(linee,"%lg",&tresh_d);
+  electronic_specific_heat_const = tresh_d;
+  if (electronic_specific_heat_const==0){
+	specific_heat_flag = 1;
+  }
   // electronic_density 
   utils::sfgets(FLERR,linee,MAXLINE,fpr_2,filename,error);
   sscanf(linee,"%lg",&tresh_d);
@@ -342,18 +345,23 @@ void FixTTM::init()
          memory->create(*ptr_flangevin,maxatom,3,"langevin:flangevin");
   }
   
-  for (int i = 0; i < nlocal; i++) {
-       (*ptr_flangevin)[i][0] = 0;
-       (*ptr_flangevin)[i][1] = 0;
-       (*ptr_flangevin)[i][2] = 0;
-        domain->x2lamda_remap(x[i], lamda);
-        int ixnode = static_cast<int>(lamda[0]*nxnodes);
-        int iynode = static_cast<int>(lamda[1]*nynodes);
-        int iznode = static_cast<int>(lamda[2]*nznodes);
-        electronic_specific_heat[i] = 3*tanh(0.0002*T_electron[ixnode][iynode][iznode])*force->boltz;
-  }
-
-    
+//  if (specific_heat_flag==1){
+     for (int i = 0; i < nlocal; i++) {
+          (*ptr_flangevin)[i][0] = 0;
+          (*ptr_flangevin)[i][1] = 0;
+          (*ptr_flangevin)[i][2] = 0;
+     }
+   
+     if (specific_heat_flag==1){
+       for (int i = 0; i < nlocal; i++) {
+           domain->x2lamda_remap(x[i], lamda);
+           int ixnode = static_cast<int>(lamda[0]*nxnodes);
+           int iynode = static_cast<int>(lamda[1]*nynodes);
+           int iznode = static_cast<int>(lamda[2]*nznodes);
+           electronic_specific_heat[i] = 3*tanh(0.0002*T_electron[ixnode][iynode][iznode])*force->boltz;
+       }
+     }
+ 
   int nxnodes = nodes_xyz[0];
   int nynodes = nodes_xyz[1];
   int nznodes = nodes_xyz[2];
@@ -558,6 +566,8 @@ void FixTTM::end_of_step()
 
   // num_inner_timesteps = # of inner steps (thermal solves)
   // required this MD step to maintain a stable explicit solve
+  double el_spec_heat_min = electronic_specific_heat_const;
+  if (specific_heat_flag==1){
     double el_spec_heat_min = 10000;
     for (int i = 0; i < nlocal; i++){
         domain->x2lamda_remap(x[i], lamda);
@@ -567,6 +577,7 @@ void FixTTM::end_of_step()
         electronic_specific_heat[i] = 3*tanh(0.0002*T_electron[ixnode][iynode][iznode])*force->boltz;
 	if (electronic_specific_heat[i] < el_spec_heat_min) el_spec_heat_min = electronic_specific_heat[i];
     }
+  }
 
   int num_inner_timesteps = 1;
   double inner_dt = update->dt;
@@ -594,9 +605,11 @@ void FixTTM::end_of_step()
 
     double Tc, Txr, Txl, Tyr, Tyl, Tzr, Tzl, u_vel, v_vel, w_vel, npar;
 
-    for (int ixnode = 0; ixnode < nxnodes; ixnode++) 
-      for (int iynode = 0; iynode < nynodes; iynode++) 
-        for (int iznode = 0; iznode < nznodes; iznode++) {
+    for (int i = 0; i < nlocal; i++){
+          domain->x2lamda_remap(x[i], lamda);
+          int ixnode = static_cast<int>(lamda[0]*nxnodes);
+          int iynode = static_cast<int>(lamda[1]*nynodes);
+          int iznode = static_cast<int>(lamda[2]*nznodes);
           //          int right_xnode = ixnode + 1;
           // APT:  Initial stab at pbc/nonbpbc boundaries
           Tc = T_electron_old[ixnode][iynode][iznode];
@@ -647,14 +660,26 @@ void FixTTM::end_of_step()
             else Tzl = 0.0;
           }
 
+	if (specific_heat_flag==1){
           T_electron[ixnode][iynode][iznode] =
             Tc +
-            inner_dt/(electronic_specific_heat*electronic_density) *
+            inner_dt/(electronic_specific_heat[i]*electronic_density) *
             (electronic_thermal_conductivity *
              ((Txr + Txl - 2*Tc)/dx/dx +
               (Tyr + Tyl - 2*Tc)/dy/dy +
               (Tzr + Tzl - 2*Tc)/dz/dz) -
              (net_energy_transfer_all[ixnode][iynode][iznode])/del_vol);
+	}
+	else {
+          T_electron[ixnode][iynode][iznode] =
+            Tc +
+            inner_dt/(electronic_specific_heat_const*electronic_density) *
+            (electronic_thermal_conductivity *
+             ((Txr + Txl - 2*Tc)/dx/dx +
+              (Tyr + Tyl - 2*Tc)/dy/dy +
+              (Tzr + Tzl - 2*Tc)/dz/dz) -
+             (net_energy_transfer_all[ixnode][iynode][iznode])/del_vol);
+        }
 
           if (convflag == 1) {
             T_electron[ixnode][iynode][iznode] -=
@@ -663,7 +688,7 @@ void FixTTM::end_of_step()
               w_vel*Tzr*(0.5*(inner_dt/dz)/npar) + w_vel*Tzl*(0.5*(inner_dt/dz)/npar);
           } 
           
-        }
+    }
 
   }
 
@@ -775,6 +800,8 @@ double FixTTM::compute_vector(int n)
   double e_energy = 0.0;
   double transfer_energy = 0.0;
 
+  double **x = atom->x;
+  int nlocal = atom->nlocal;
   double dx = domain->xprd/nxnodes;
   double dy = domain->yprd/nynodes;
   double dz = domain->zprd/nznodes;
@@ -782,10 +809,19 @@ double FixTTM::compute_vector(int n)
   int    grid_cells_low_count = 0;
   int    min_atoms_in_cell = 100000000;
 
-  for (int ixnode = 0; ixnode < nxnodes; ixnode++)
-    for (int iynode = 0; iynode < nynodes; iynode++)
-      for (int iznode = 0; iznode < nznodes; iznode++) {
-        e_energy += T_electron[ixnode][iynode][iznode]*electronic_specific_heat*electronic_density*del_vol;
+  for (int i = 0; i < nlocal; i++){
+        domain->x2lamda_remap(x[i], lamda);
+        int ixnode = static_cast<int>(lamda[0]*nxnodes);
+        int iynode = static_cast<int>(lamda[1]*nynodes);
+        int iznode = static_cast<int>(lamda[2]*nznodes);
+//  for (int ixnode = 0; ixnode < nxnodes; ixnode++)
+//    for (int iynode = 0; iynode < nynodes; iynode++)
+//      for (int iznode = 0; iznode < nznodes; iznode++) {
+        if (specific_heat_flag==1)
+           e_energy += T_electron[ixnode][iynode][iznode]*electronic_specific_heat[i]*electronic_density*del_vol;
+	else
+	   e_energy += T_electron[ixnode][iynode][iznode]*electronic_specific_heat_const*electronic_density*del_vol;
+
         transfer_energy += net_energy_transfer_all[ixnode][iynode][iznode]*update->dt;
         if (nvel_all[ixnode][iynode][iznode] < Nlimit){
            grid_cells_low_count += 1;

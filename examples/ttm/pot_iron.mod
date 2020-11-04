@@ -1,9 +1,11 @@
 #pair_style eam/fs
 #pair_coeff * * FeVoter-ChenRecheck.fs Fe
 
-pair_style      hybrid/overlay snap zbl 4.0 4.8 spin/exchange/biquadratic 5.0
-pair_coeff      * * snap Fe_pot_snappy.snapcoeff Fe_pot_snappy.snapparam Fe
-pair_coeff      * * zbl 26 26
+#pair_style      hybrid/overlay snap zbl 4.0 4.8 spin/exchange/biquadratic 5.0
+pair_style      hybrid/overlay eam/fs spin/exchange/biquadratic 5.0
+#pair_coeff      * * snap Fe_pot_snappy.snapcoeff Fe_pot_snappy.snapparam Fe
+#pair_coeff      * * zbl 26 26
+pair_coeff      * * eam/fs FeVoter-ChenRecheck.fs Fe
 pair_coeff      * * spin/exchange/biquadratic biquadratic 5.0 0.2827 -4.747 0.7810 -0.03619 -2.973 0.5273
 
 # Setup neighbor style

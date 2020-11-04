@@ -56,6 +56,7 @@ class FixTTM : public Fix {
   int Nlimit;
   int convflag;
   int estopflag;
+  int specific_heat_flag;
   int id_lang;
   int id_spin;
   int *langbias;  
@@ -83,7 +84,7 @@ class FixTTM : public Fix {
   double *electronic_specific_heat;
   double electronic_density;
   double electronic_thermal_conductivity;
-  double gamma_p,gamma_s,v_0,v_0_sq;
+  double gamma_p,gamma_s,v_0,v_0_sq, electronic_specific_heat_const;
   int check_temp_flag;
   int maxatom, maxatom1;
   void read_initial_electron_temperatures();
