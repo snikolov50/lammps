@@ -81,7 +81,7 @@ class FixTTM : public Fix {
   double ***sum_vsq,***sum_mass_vsq;
   double ***sum_vsq_all,***sum_mass_vsq_all;
   double ***net_energy_transfer,***net_energy_transfer_all;
-  double *electronic_specific_heat;
+  double ***electronic_specific_heat;
   double electronic_density;
   double electronic_thermal_conductivity;
   double gamma_p,gamma_s,v_0,v_0_sq, electronic_specific_heat_const;

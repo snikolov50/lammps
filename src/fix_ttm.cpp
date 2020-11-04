@@ -243,7 +243,7 @@ FixTTM::FixTTM(LAMMPS *lmp, int narg, char **arg) :
                  "TTM:net_energy_transfer");
   memory->create(net_energy_transfer_all,nxnodes,nynodes,nznodes,
                  "TTM:net_energy_transfer_all");
-  memory->create(electronic_specific_heat,atom->nlocal,"TTM:electronic_specific_heat");
+  memory->create(electronic_specific_heat,nxnodes,nynodes,nznodes,"TTM:electronic_specific_heat");
   atom->add_callback(0);
   atom->add_callback(1);
 
@@ -353,13 +353,11 @@ void FixTTM::init()
      }
    
      if (specific_heat_flag==1){
-       for (int i = 0; i < nlocal; i++) {
-           domain->x2lamda_remap(x[i], lamda);
-           int ixnode = static_cast<int>(lamda[0]*nxnodes);
-           int iynode = static_cast<int>(lamda[1]*nynodes);
-           int iznode = static_cast<int>(lamda[2]*nznodes);
-           electronic_specific_heat[i] = 3*tanh(0.0002*T_electron[ixnode][iynode][iznode])*force->boltz;
-       }
+        for (int ixnode = 0; ixnode < nxnodes; ixnode++)
+          for (int iynode = 0; iynode < nynodes; iynode++)
+            for (int iznode = 0; iznode < nznodes; iznode++){
+              electronic_specific_heat[ixnode][iynode][iznode] = 3*tanh(0.0002*T_electron[ixnode][iynode][iznode])*force->boltz;
+            }
      }
  
   int nxnodes = nodes_xyz[0];
@@ -568,15 +566,14 @@ void FixTTM::end_of_step()
   // required this MD step to maintain a stable explicit solve
   double el_spec_heat_min = electronic_specific_heat_const;
   if (specific_heat_flag==1){
-    double el_spec_heat_min = 10000;
-    for (int i = 0; i < nlocal; i++){
-        domain->x2lamda_remap(x[i], lamda);
-        int ixnode = static_cast<int>(lamda[0]*nxnodes);
-        int iynode = static_cast<int>(lamda[1]*nynodes);
-        int iznode = static_cast<int>(lamda[2]*nznodes);
-        electronic_specific_heat[i] = 3*tanh(0.0002*T_electron[ixnode][iynode][iznode])*force->boltz;
-	if (electronic_specific_heat[i] < el_spec_heat_min) el_spec_heat_min = electronic_specific_heat[i];
-    }
+    el_spec_heat_min = 10000;
+    for (int ixnode = 0; ixnode < nxnodes; ixnode++)
+      for (int iynode = 0; iynode < nynodes; iynode++)
+        for (int iznode = 0; iznode < nznodes; iznode++){
+	    electronic_specific_heat[ixnode][iynode][iznode] = 3*tanh(0.0002*T_electron[ixnode][iynode][iznode])*force->boltz;
+	    if (electronic_specific_heat[ixnode][iynode][iznode] < el_spec_heat_min) el_spec_heat_min = electronic_specific_heat[ixnode][iynode][iznode];
+
+        }
   }
 
   int num_inner_timesteps = 1;
@@ -604,14 +601,10 @@ void FixTTM::end_of_step()
     // compute new electron T profile
 
     double Tc, Txr, Txl, Tyr, Tyl, Tzr, Tzl, u_vel, v_vel, w_vel, npar;
+    for (int ixnode = 0; ixnode < nxnodes; ixnode++)
+      for (int iynode = 0; iynode < nynodes; iynode++)
+        for (int iznode = 0; iznode < nznodes; iznode++){
 
-    for (int i = 0; i < nlocal; i++){
-          domain->x2lamda_remap(x[i], lamda);
-          int ixnode = static_cast<int>(lamda[0]*nxnodes);
-          int iynode = static_cast<int>(lamda[1]*nynodes);
-          int iznode = static_cast<int>(lamda[2]*nznodes);
-          //          int right_xnode = ixnode + 1;
-          // APT:  Initial stab at pbc/nonbpbc boundaries
           Tc = T_electron_old[ixnode][iynode][iznode];
           u_vel = u_node_all[ixnode][iynode][iznode];
           v_vel = v_node_all[ixnode][iynode][iznode];
@@ -663,7 +656,7 @@ void FixTTM::end_of_step()
 	if (specific_heat_flag==1){
           T_electron[ixnode][iynode][iznode] =
             Tc +
-            inner_dt/(electronic_specific_heat[i]*electronic_density) *
+            inner_dt/(electronic_specific_heat[ixnode][iynode][iznode]*electronic_density) *
             (electronic_thermal_conductivity *
              ((Txr + Txl - 2*Tc)/dx/dx +
               (Tyr + Tyl - 2*Tc)/dy/dy +
@@ -693,7 +686,7 @@ void FixTTM::end_of_step()
   }
 
   // output nodal temperatures for current timestep
-
+//  std::cout << specific_heat_flag << " " << electronic_specific_heat_const << std::endl;
   if ((nfileevery) && !(update->ntimestep % nfileevery)) {
 
     // compute atomic Ta for each grid point
@@ -809,16 +802,11 @@ double FixTTM::compute_vector(int n)
   int    grid_cells_low_count = 0;
   int    min_atoms_in_cell = 100000000;
 
-  for (int i = 0; i < nlocal; i++){
-        domain->x2lamda_remap(x[i], lamda);
-        int ixnode = static_cast<int>(lamda[0]*nxnodes);
-        int iynode = static_cast<int>(lamda[1]*nynodes);
-        int iznode = static_cast<int>(lamda[2]*nznodes);
-//  for (int ixnode = 0; ixnode < nxnodes; ixnode++)
-//    for (int iynode = 0; iynode < nynodes; iynode++)
-//      for (int iznode = 0; iznode < nznodes; iznode++) {
+  for (int ixnode = 0; ixnode < nxnodes; ixnode++)
+    for (int iynode = 0; iynode < nynodes; iynode++)
+      for (int iznode = 0; iznode < nznodes; iznode++) {
         if (specific_heat_flag==1)
-           e_energy += T_electron[ixnode][iynode][iznode]*electronic_specific_heat[i]*electronic_density*del_vol;
+           e_energy += T_electron[ixnode][iynode][iznode]*electronic_specific_heat[ixnode][iynode][iznode]*electronic_density*del_vol;
 	else
 	   e_energy += T_electron[ixnode][iynode][iznode]*electronic_specific_heat_const*electronic_density*del_vol;
 
