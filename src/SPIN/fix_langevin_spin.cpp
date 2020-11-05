@@ -48,7 +48,7 @@ FixLangevinSpin::FixLangevinSpin(LAMMPS *lmp, int narg, char **arg) :
   Fix(lmp, narg, arg), id_temp(NULL), random(NULL), ptr_T_el(NULL), emrd(NULL)//, emrd_all(NULL)
 {
   if (narg != 6){
-      if (narg != 9) error->all(FLERR,"Illegal langevin/spin command");
+      if (narg != 8) error->all(FLERR,"Illegal langevin/spin command");
      }
 
   dynamic_group_allow = 1;
@@ -84,13 +84,12 @@ FixLangevinSpin::FixLangevinSpin(LAMMPS *lmp, int narg, char **arg) :
 
      if (strcmp(arg[iarg],"lang")==0){
         if (iarg+1 > narg-1) error->all(FLERR,"Illegal fix langevin/spin/3tm command");
-        if (iarg+2 > narg-1) error->all(FLERR,"Illegal fix langevin/spin/3tm command");
         strncpy(lang_name,arg[iarg+1],100);
         ttm_err = 0;
         ttm_flag = 1;
 	temp_flag = 0;
 	tdamp_flag = 1;
-	alpha_t = force->numeric(FLERR,arg[iarg+2]);
+	alpha_t = force->numeric(FLERR,arg[iarg-2]);
      }
 
      iarg++;
@@ -263,7 +262,7 @@ void FixLangevinSpin::add_temperature_3tm(int i, double spi[3], double fmi[3])
       
   D = (alpha_t*gil_factor*kb*(*ptr_T_el)[i]);
   D /= (hbar*dts);
-  sigma_ttm[i] = sqrt(6.0*D); // to be checked
+  sigma_ttm[i] = sqrt(2.0*D); // to be checked
 
 //  }
 
