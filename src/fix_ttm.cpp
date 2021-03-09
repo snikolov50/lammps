@@ -478,7 +478,7 @@ void FixTTM::pre_force(int /* vflag */)
 
   for (int i = 1; i <= atom->ntypes; i++) {
       (*ptr_gfactor1)[i] = - gamma_p / force->ftm2v;
-      (*ptr_gfactor2)[i] = sqrt(24.0*force->boltz*gamma_p/update->dt/force->mvv2e) / force->ftm2v;
+      (*ptr_gfactor2)[i] = sqrt(45.0*force->boltz*gamma_p/update->dt/force->mvv2e) / force->ftm2v;
   }
 
   for (int i = 0; i < nlocal; i++){
